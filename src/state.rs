@@ -1,0 +1,149 @@
+use serde::Serialize;
+use std::sync::{Arc, RwLock};
+
+/// Represents the internal state of the simulated device
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceState {
+    // Controller identification
+    pub cell_id: u32,
+    pub channel_id: u32,
+    pub controller_name: String,
+    pub supplier_code: String,
+
+    // Parameter set (pset) state
+    pub current_pset_id: Option<u32>,
+    pub current_pset_name: Option<String>,
+
+    // Batch management
+    pub batch_size: u32,
+    pub batch_counter: u32,
+
+    // Tool state
+    pub tool_enabled: bool,
+
+    // Vehicle/Job identification
+    pub vehicle_id: Option<String>,
+    pub current_job_id: Option<u32>,
+
+    // Subscription state
+    pub pset_subscribed: bool,
+    pub tightening_result_subscribed: bool,
+}
+
+impl DeviceState {
+    /// Create a new device state with default values
+    pub fn new() -> Self {
+        Self {
+            cell_id: 1,
+            channel_id: 1,
+            controller_name: "OpenProtocolSimulator".to_string(),
+            supplier_code: "SIM".to_string(),
+            current_pset_id: Some(1),
+            current_pset_name: Some("Default".to_string()),
+            batch_size: 1,
+            batch_counter: 0,
+            tool_enabled: true,
+            vehicle_id: None,
+            current_job_id: Some(1),
+            pset_subscribed: false,
+            tightening_result_subscribed: false,
+        }
+    }
+
+    /// Create a thread-safe shared state
+    pub fn new_shared() -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self::new()))
+    }
+
+    /// Reset batch counter
+    pub fn reset_batch_counter(&mut self) {
+        self.batch_counter = 0;
+    }
+
+    /// Increment batch counter
+    pub fn increment_batch_counter(&mut self) {
+        self.batch_counter += 1;
+    }
+
+    /// Set the current parameter set
+    pub fn set_pset(&mut self, pset_id: u32, pset_name: Option<String>) {
+        self.current_pset_id = Some(pset_id);
+        self.current_pset_name = pset_name;
+    }
+
+    /// Set batch size
+    pub fn set_batch_size(&mut self, size: u32) {
+        self.batch_size = size;
+        self.reset_batch_counter();
+    }
+
+    /// Enable the tool
+    pub fn enable_tool(&mut self) {
+        self.tool_enabled = true;
+    }
+
+    /// Disable the tool
+    pub fn disable_tool(&mut self) {
+        self.tool_enabled = false;
+    }
+
+    /// Set vehicle ID
+    pub fn set_vehicle_id(&mut self, vin: String) {
+        self.vehicle_id = Some(vin);
+    }
+
+    /// Clear vehicle ID
+    pub fn clear_vehicle_id(&mut self) {
+        self.vehicle_id = None;
+    }
+}
+
+impl Default for DeviceState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_device_state_creation() {
+        let state = DeviceState::new();
+        assert_eq!(state.cell_id, 1);
+        assert_eq!(state.tool_enabled, true);
+        assert_eq!(state.batch_counter, 0);
+    }
+
+    #[test]
+    fn test_batch_counter() {
+        let mut state = DeviceState::new();
+        state.increment_batch_counter();
+        assert_eq!(state.batch_counter, 1);
+        state.reset_batch_counter();
+        assert_eq!(state.batch_counter, 0);
+    }
+
+    #[test]
+    fn test_tool_state() {
+        let mut state = DeviceState::new();
+        state.disable_tool();
+        assert_eq!(state.tool_enabled, false);
+        state.enable_tool();
+        assert_eq!(state.tool_enabled, true);
+    }
+
+    #[test]
+    fn test_shared_state() {
+        let state = DeviceState::new_shared();
+        {
+            let mut s = state.write().unwrap();
+            s.set_pset(5, Some("Test".to_string()));
+        }
+        {
+            let s = state.read().unwrap();
+            assert_eq!(s.current_pset_id, Some(5));
+        }
+    }
+}
