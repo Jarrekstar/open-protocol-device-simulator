@@ -2,6 +2,7 @@ use crate::handler::{HandlerError, MidHandler};
 use crate::protocol::{Message, Response};
 use crate::state::DeviceState;
 use std::sync::{Arc, RwLock};
+use crate::handler::data::command_accepted::CommandAccepted;
 
 /// MID 0052 - Vehicle ID Number download
 /// Receives vehicle identification and responds with acknowledgment
@@ -32,7 +33,10 @@ impl MidHandler for VehicleIdHandler {
             state.set_vehicle_id(vin);
         }
 
+        let ack_data = CommandAccepted::with_mid(52);
+
+
         // Respond with MID 0005 (Command accepted)
-        Ok(Response::new(5, message.revision, Vec::new()))
+        Ok(Response::from_data(5, message.revision, ack_data))
     }
 }

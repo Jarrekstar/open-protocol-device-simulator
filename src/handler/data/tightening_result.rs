@@ -110,42 +110,42 @@ impl TighteningResult {
 impl ResponseData for TighteningResult {
     fn serialize(&self) -> Vec<u8> {
         let mut builder = FieldBuilder::new()
-            .add_int(1, self.cell_id as i32, 4)
-            .add_int(2, self.channel_id as i32, 2)
-            .add_str(3, &self.controller_name, 25);
+            .add_int(Some(1), self.cell_id as i32, 4)
+            .add_int(Some(2), self.channel_id as i32, 2)
+            .add_str(Some(3), &self.controller_name, 25);
 
         if let Some(ref vin) = self.vin_number {
-            builder = builder.add_str(4, vin, 25);
+            builder = builder.add_str(Some(4), vin, 25);
         }
 
         builder = builder
-            .add_int(5, self.job_id as i32, 4)
-            .add_int(6, self.pset_id as i32, 3)
-            .add_int(7, self.batch_size as i32, 4)
-            .add_int(8, self.batch_counter as i32, 4)
-            .add_int(9, if self.tightening_status { 1 } else { 0 }, 1)
-            .add_int(10, if self.torque_status { 1 } else { 0 }, 1)
-            .add_int(11, if self.angle_status { 1 } else { 0 }, 1)
-            .add_float(12, self.torque_min, 6, 2)
-            .add_float(13, self.torque_max, 6, 2)
-            .add_float(14, self.torque_target, 6, 2)
-            .add_float(15, self.torque, 6, 2)
-            .add_float(16, self.angle_min, 5, 0)
-            .add_float(17, self.angle_max, 5, 0)
-            .add_float(18, self.angle_target, 5, 0)
-            .add_float(19, self.angle, 5, 0)
-            .add_str(20, &self.timestamp, 19);
+            .add_int(Some(5), self.job_id as i32, 4)
+            .add_int(Some(6), self.pset_id as i32, 3)
+            .add_int(Some(7), self.batch_size as i32, 4)
+            .add_int(Some(8), self.batch_counter as i32, 4)
+            .add_int(Some(9), if self.tightening_status { 1 } else { 0 }, 1)
+            .add_int(Some(10), if self.torque_status { 1 } else { 0 }, 1)
+            .add_int(Some(11), if self.angle_status { 1 } else { 0 }, 1)
+            .add_float(Some(12), self.torque_min, 6, 2)
+            .add_float(Some(13), self.torque_max, 6, 2)
+            .add_float(Some(14), self.torque_target, 6, 2)
+            .add_float(Some(15), self.torque, 6, 2)
+            .add_float(Some(16), self.angle_min, 5, 0)
+            .add_float(Some(17), self.angle_max, 5, 0)
+            .add_float(Some(18), self.angle_target, 5, 0)
+            .add_float(Some(19), self.angle, 5, 0)
+            .add_str(Some(20), &self.timestamp, 19);
 
         if let Some(ref pset_change) = self.last_pset_change {
-            builder = builder.add_str(21, pset_change, 19);
+            builder = builder.add_str(Some(21), pset_change, 19);
         }
 
         if let Some(batch_status) = self.batch_status {
-            builder = builder.add_int(22, if batch_status { 1 } else { 0 }, 1);
+            builder = builder.add_int(Some(22), if batch_status { 1 } else { 0 }, 1);
         }
 
         if let Some(tightening_id) = self.tightening_id {
-            builder = builder.add_int(23, tightening_id as i32, 10);
+            builder = builder.add_int(Some(23), tightening_id as i32, 10);
         }
 
         builder.build()

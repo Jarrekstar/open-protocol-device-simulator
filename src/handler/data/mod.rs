@@ -5,6 +5,7 @@
 
 pub mod communication_start;
 pub mod tightening_result;
+pub mod command_accepted;
 
 pub use communication_start::CommunicationStartAck;
 pub use tightening_result::TighteningResult;

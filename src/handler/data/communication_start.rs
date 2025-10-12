@@ -55,12 +55,12 @@ impl Default for CommunicationStartAck {
 impl ResponseData for CommunicationStartAck {
     fn serialize(&self) -> Vec<u8> {
         let mut builder = FieldBuilder::new()
-            .add_int(1, self.cell_id as i32, 4)
-            .add_int(2, self.channel_id as i32, 2)
-            .add_str(3, &self.controller_name, 25);
+            .add_int(Some(1), self.cell_id as i32, 4)
+            .add_int(Some(2), self.channel_id as i32, 2)
+            .add_str(Some(3), &self.controller_name, 25);
 
         if let Some(ref supplier) = self.supplier_code {
-            builder = builder.add_str(4, supplier, 3);
+            builder = builder.add_str(Some(4), supplier, 3);
         }
 
         builder.build()
