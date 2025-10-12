@@ -35,7 +35,7 @@ impl MidHandler for PsetSelectHandler {
             state.set_pset(pset_id, Some(format!("Pset_{}", pset_id)));
         }
 
-        // Respond with MID 0005 (Command accepted)
-        Ok(Response::new(5, message.revision, Vec::new()))
+        // Respond with MID 0016 (Command accepted)
+        Ok(Response::new(16, message.revision, Vec::new()))
     }
 }

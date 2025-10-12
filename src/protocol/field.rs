@@ -2,46 +2,50 @@
 #[derive(Debug, Clone)]
 pub struct Field {
     /// Parameter ID (e.g., "01", "02", etc.)
-    pub id: String,
+    pub id: Option<String>,
     /// Parameter value
     pub value: String,
 }
 
 impl Field {
     /// Create a new field with a parameter ID and value
-    pub fn new(id: u8, value: impl Into<String>) -> Self {
+    pub fn new(id: Option<u8>, value: impl Into<String>) -> Self {
+        let id = id.map(|v| format!("{:02}", v));
         Self {
-            id: format!("{:02}", id),
+            id,
             value: value.into(),
         }
     }
 
     /// Create a field from an integer value
-    pub fn from_int(id: u8, value: i32, width: usize) -> Self {
+    pub fn from_int(id: Option<u8>, value: i32, width: usize) -> Self {
+        let id = id.map(|v| format!("{:02}", v));
         Self {
-            id: format!("{:02}", id),
+            id,
             value: format!("{:0width$}", value, width = width),
         }
     }
 
     /// Create a field from a float value
-    pub fn from_float(id: u8, value: f64, width: usize, precision: usize) -> Self {
+    pub fn from_float(id: Option<u8>, value: f64, width: usize, precision: usize) -> Self {
+        let id = id.map(|v| format!("{:02}", v));
         Self {
-            id: format!("{:02}", id),
+            id,
             value: format!("{:0width$.precision$}", value, width = width, precision = precision),
         }
     }
 
     /// Create a field from a string value with fixed width (space-padded)
-    pub fn from_str(id: u8, value: impl AsRef<str>, width: usize) -> Self {
+    pub fn from_str(id: Option<u8>, value: impl AsRef<str>, width: usize) -> Self {
         let s = value.as_ref();
         let padded = if s.len() >= width {
             s[..width].to_string()
         } else {
             format!("{:<width$}", s, width = width)
         };
+        let id = id.map(|v| format!("{:02}", v));
         Self {
-            id: format!("{:02}", id),
+            id,
             value: padded,
         }
     }
@@ -53,8 +57,10 @@ impl Field {
         let length_str = format!("{:02}", value_length);
 
         let mut result = Vec::new();
-        result.extend_from_slice(self.id.as_bytes());
-        result.extend_from_slice(length_str.as_bytes());
+        if let Some(id) = &self.id {
+            result.extend_from_slice(id.as_bytes());
+        }
+      
         result.extend_from_slice(self.value.as_bytes());
 
         result
@@ -76,15 +82,15 @@ impl FieldBuilder {
         self
     }
 
-    pub fn add_int(self, id: u8, value: i32, width: usize) -> Self {
+    pub fn add_int(self, id: Option<u8>, value: i32, width: usize) -> Self {
         self.add_field(Field::from_int(id, value, width))
     }
 
-    pub fn add_float(self, id: u8, value: f64, width: usize, precision: usize) -> Self {
+    pub fn add_float(self, id: Option<u8>, value: f64, width: usize, precision: usize) -> Self {
         self.add_field(Field::from_float(id, value, width, precision))
     }
 
-    pub fn add_str(self, id: u8, value: impl AsRef<str>, width: usize) -> Self {
+    pub fn add_str(self, id: Option<u8>, value: impl AsRef<str>, width: usize) -> Self {
         self.add_field(Field::from_str(id, value, width))
     }
 
@@ -109,32 +115,32 @@ mod tests {
 
     #[test]
     fn test_field_serialization() {
-        let field = Field::new(1, "TEST");
+        let field = Field::new(Some(1), "TEST");
         let serialized = field.serialize();
         // Format: 01 04 TEST
         // "01" (param ID) + "04" (length) + "TEST" (value)
-        assert_eq!(serialized, b"0104TEST");
+        assert_eq!(serialized, b"01TEST");
     }
 
     #[test]
     fn test_int_field() {
-        let field = Field::from_int(2, 123, 5);
+        let field = Field::from_int(Some(2), 123, 5);
         let serialized = field.serialize();
-        assert_eq!(serialized, b"020500123");
+        assert_eq!(serialized, b"0200123");
     }
 
     #[test]
     fn test_str_field() {
-        let field = Field::from_str(3, "ABC", 10);
+        let field = Field::from_str(Some(3), "ABC", 10);
         let serialized = field.serialize();
-        assert_eq!(serialized, b"0310ABC       ");
+        assert_eq!(serialized, b"03ABC       ");
     }
 
     #[test]
     fn test_builder() {
         let data = FieldBuilder::new()
-            .add_int(1, 100, 3)
-            .add_str(2, "TEST", 5)
+            .add_int(Some(1), 100, 3)
+            .add_str(Some(2), "TEST", 5)
             .build();
 
         // Verify the data contains both fields
