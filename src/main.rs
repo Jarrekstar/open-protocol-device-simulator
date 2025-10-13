@@ -2,6 +2,7 @@ use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 mod batch_manager;
 mod codec;
+mod device_fsm;
 mod events;
 mod handler;
 mod http_server;
