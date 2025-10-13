@@ -9,6 +9,7 @@ pub struct Field {
 
 impl Field {
     /// Create a new field with a parameter ID and value
+    #[allow(dead_code)]
     pub fn new(id: Option<u8>, value: impl Into<String>) -> Self {
         let id = id.map(|v| format!("{:02}", v));
         Self {
@@ -51,16 +52,15 @@ impl Field {
     }
 
     /// Serialize this field in Open Protocol format
-    /// Format: [ParamID][Length][Value]
+    /// Format: [ParamID][Value]
+    /// Note: Some Open Protocol versions include a length field, but this implementation
+    /// uses direct field serialization
     pub fn serialize(&self) -> Vec<u8> {
-        let value_length = self.value.len();
-        let length_str = format!("{:02}", value_length);
-
         let mut result = Vec::new();
         if let Some(id) = &self.id {
             result.extend_from_slice(id.as_bytes());
         }
-      
+
         result.extend_from_slice(self.value.as_bytes());
 
         result

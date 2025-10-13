@@ -13,6 +13,7 @@ impl ResponseData for CommandAccepted {
 }
 
 impl CommandAccepted {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self { accepted_mid: 0 }
     }

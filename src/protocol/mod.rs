@@ -11,6 +11,7 @@ use thiserror::Error;
 /// Data: Optional MID-specific payload
 #[derive(Debug, Clone)]
 pub struct Message {
+    #[allow(dead_code)]
     pub length: u32,      // Total message length (bytes 0-3)
     pub mid: u16,         // Message ID (bytes 4-7)
     pub revision: u8,     // Protocol revision (bytes 8-10)

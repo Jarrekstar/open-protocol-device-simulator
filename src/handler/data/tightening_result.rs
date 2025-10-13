@@ -78,6 +78,7 @@ pub struct TighteningResult {
 
 impl TighteningResult {
     /// Create a new tightening result with example values
+    #[allow(dead_code)]
     pub fn example() -> Self {
         Self {
             cell_id: 1,
@@ -109,46 +110,47 @@ impl TighteningResult {
 
 impl ResponseData for TighteningResult {
     fn serialize(&self) -> Vec<u8> {
-        let mut builder = FieldBuilder::new()
+        // Always send VIN (param 04) - use empty string (25 spaces) if None
+        let vin = self.vin_number.as_deref().unwrap_or("");
+
+        // Always send last pset change (param 21) - use empty string (19 spaces) if None
+        let pset_change = self.last_pset_change.as_deref().unwrap_or("");
+
+        // Always send batch status (param 22) - 0=NOK, 1=OK, 2=not used
+        let batch_status_val = match self.batch_status {
+            Some(true) => 1,
+            Some(false) => 0,
+            None => 2,
+        };
+
+        // Always send tightening ID (param 23) - use 0 if None
+        let tightening_id = self.tightening_id.unwrap_or(0);
+
+        FieldBuilder::new()
             .add_int(Some(1), self.cell_id as i32, 4)
             .add_int(Some(2), self.channel_id as i32, 2)
-            .add_str(Some(3), &self.controller_name, 25);
-
-        if let Some(ref vin) = self.vin_number {
-            builder = builder.add_str(Some(4), vin, 25);
-        }
-
-        builder = builder
-            .add_int(Some(5), self.job_id as i32, 4)
+            .add_str(Some(3), &self.controller_name, 25)
+            .add_str(Some(4), vin, 25)
+            .add_int(Some(5), self.job_id as i32, 2)
             .add_int(Some(6), self.pset_id as i32, 3)
             .add_int(Some(7), self.batch_size as i32, 4)
             .add_int(Some(8), self.batch_counter as i32, 4)
             .add_int(Some(9), if self.tightening_status { 1 } else { 0 }, 1)
             .add_int(Some(10), if self.torque_status { 1 } else { 0 }, 1)
             .add_int(Some(11), if self.angle_status { 1 } else { 0 }, 1)
-            .add_float(Some(12), self.torque_min, 6, 2)
-            .add_float(Some(13), self.torque_max, 6, 2)
-            .add_float(Some(14), self.torque_target, 6, 2)
-            .add_float(Some(15), self.torque, 6, 2)
-            .add_float(Some(16), self.angle_min, 5, 0)
-            .add_float(Some(17), self.angle_max, 5, 0)
-            .add_float(Some(18), self.angle_target, 5, 0)
-            .add_float(Some(19), self.angle, 5, 0)
-            .add_str(Some(20), &self.timestamp, 19);
-
-        if let Some(ref pset_change) = self.last_pset_change {
-            builder = builder.add_str(Some(21), pset_change, 19);
-        }
-
-        if let Some(batch_status) = self.batch_status {
-            builder = builder.add_int(Some(22), if batch_status { 1 } else { 0 }, 1);
-        }
-
-        if let Some(tightening_id) = self.tightening_id {
-            builder = builder.add_int(Some(23), tightening_id as i32, 10);
-        }
-
-        builder.build()
+            .add_int(Some(12), (self.torque_min * 100.0) as i32, 6)
+            .add_int(Some(13), (self.torque_max * 100.0) as i32, 6)
+            .add_int(Some(14), (self.torque_target * 100.0) as i32, 6)
+            .add_int(Some(15), (self.torque * 100.0) as i32, 6)
+            .add_int(Some(16), self.angle_min as i32, 5)
+            .add_int(Some(17), self.angle_max as i32, 5)
+            .add_int(Some(18), self.angle_target as i32, 5)
+            .add_int(Some(19), self.angle as i32, 5)
+            .add_str(Some(20), &self.timestamp, 19)
+            .add_str(Some(21), pset_change, 19)
+            .add_int(Some(22), batch_status_val, 1)
+            .add_int(Some(23), tightening_id as i32, 10)
+            .build()
     }
 }
 
