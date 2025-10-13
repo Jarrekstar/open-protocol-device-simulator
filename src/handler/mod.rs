@@ -1,5 +1,6 @@
 pub mod batch_size;
 pub mod communication_start;
+pub mod communication_stop;
 pub mod data;
 pub mod keep_alive;
 pub mod pset_select;
@@ -74,8 +75,9 @@ pub fn create_default_registry(state: Arc<RwLock<DeviceState>>) -> HandlerRegist
 
     // Register all MID handlers (sorted by MID number)
     registry.register(1, Box::new(communication_start::CommunicationStartHandler::new(Arc::clone(&state))));
+    registry.register(3, Box::new(communication_stop::CommunicationStopHandler::new(Arc::clone(&state))));
     registry.register(14, Box::new(pset_subscription::PsetSubscriptionHandler::new(Arc::clone(&state))));
-    registry.register(16, Box::new(pset_unsubscribe::PsetUnsubscribeHandler::new(Arc::clone(&state))));
+    registry.register(17, Box::new(pset_unsubscribe::PsetUnsubscribeHandler::new(Arc::clone(&state))));
     registry.register(18, Box::new(pset_select::PsetSelectHandler::new(Arc::clone(&state))));
     registry.register(19, Box::new(batch_size::BatchSizeHandler::new(Arc::clone(&state))));
     registry.register(42, Box::new(tool_disable::ToolDisableHandler::new(Arc::clone(&state))));
