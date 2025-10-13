@@ -1,4 +1,5 @@
 use crate::batch_manager::BatchManager;
+use crate::device_fsm::DeviceFSMState;
 use serde::Serialize;
 use std::sync::{Arc, RwLock};
 
@@ -17,6 +18,9 @@ pub struct DeviceState {
 
     // Batch management
     pub batch_manager: BatchManager,
+
+    // Device operational state
+    pub device_fsm_state: DeviceFSMState,
 
     // Tool state
     pub tool_enabled: bool,
@@ -41,6 +45,7 @@ impl DeviceState {
             current_pset_id: Some(1),
             current_pset_name: Some("Default".to_string()),
             batch_manager: BatchManager::new(1),
+            device_fsm_state: DeviceFSMState::idle(),
             tool_enabled: true,
             vehicle_id: None,
             current_job_id: Some(1),

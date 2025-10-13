@@ -1,3 +1,4 @@
+use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
 use crate::events::{EventBroadcaster, SimulatorEvent};
 use crate::handler::data::TighteningResult;
 use crate::state::DeviceState;
@@ -10,6 +11,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 /// Shared state for HTTP server
 #[derive(Clone)]
@@ -28,6 +30,7 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
     let app = Router::new()
         .route("/state", get(get_state))
         .route("/simulate/tightening", post(simulate_tightening))
+        .route("/auto-tightening/start", post(start_auto_tightening))
         .with_state(server_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
@@ -36,8 +39,9 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
 
     println!("HTTP state server listening on http://0.0.0.0:8081");
     println!("Endpoints:");
-    println!("  GET  /state                  - View device state");
-    println!("  POST /simulate/tightening    - Simulate a tightening operation");
+    println!("  GET  /state                       - View device state");
+    println!("  POST /simulate/tightening         - Simulate a single tightening operation");
+    println!("  POST /auto-tightening/start       - Start automated tightening simulation");
 
     axum::serve(listener, app)
         .await
@@ -176,4 +180,212 @@ async fn simulate_tightening(
             )
         }
     }
+}
+
+// ============================================================================
+// Automated Tightening Simulation
+// ============================================================================
+
+#[derive(Deserialize)]
+struct AutoTighteningRequest {
+    /// Number of tightenings to simulate
+    #[serde(default = "default_count")]
+    count: u32,
+    /// Time between tightening cycles in milliseconds
+    #[serde(default = "default_interval")]
+    interval_ms: u64,
+    /// Duration of each tightening operation in milliseconds
+    #[serde(default = "default_duration")]
+    duration_ms: u64,
+    /// Probability of failure (0.0 = never fail, 1.0 = always fail)
+    #[serde(default = "default_failure_rate")]
+    failure_rate: f64,
+}
+
+fn default_count() -> u32 { 10 }
+fn default_interval() -> u64 { 3000 }  // 3 seconds between cycles
+fn default_duration() -> u64 { 1500 }  // 1.5 second tightening
+fn default_failure_rate() -> f64 { 0.1 }  // 10% failure rate
+
+#[derive(Serialize)]
+struct AutoTighteningResponse {
+    success: bool,
+    message: String,
+    count: u32,
+    duration_ms: u64,
+    interval_ms: u64,
+}
+
+/// Handler for POST /auto-tightening/start endpoint
+/// Starts an automated tightening simulation in the background
+async fn start_auto_tightening(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(payload): Json<AutoTighteningRequest>,
+) -> impl IntoResponse {
+    let count = payload.count;
+    let interval_ms = payload.interval_ms;
+    let duration_ms = payload.duration_ms;
+    let failure_rate = payload.failure_rate.clamp(0.0, 1.0);
+
+    // Clone state for background task
+    let state = Arc::clone(&server_state.device_state);
+    let broadcaster = server_state.broadcaster.clone();
+
+    // Spawn background task
+    tokio::spawn(async move {
+        println!("Starting automated tightening: {} cycles", count);
+
+        for cycle in 0..count {
+            // Check if tool is enabled before starting cycle
+            let tool_enabled = {
+                let s = state.read().unwrap();
+                s.tool_enabled
+            };
+
+            if !tool_enabled {
+                println!("Auto-tightening stopped: tool disabled at cycle {}/{}", cycle + 1, count);
+                break;
+            }
+
+            // ================================================================
+            // Phase 1: IDLE → TIGHTENING
+            // ================================================================
+
+            let params = TighteningParams::default_test();
+
+            // Update state to reflect tightening in progress
+            {
+                let mut s = state.write().unwrap();
+                let fsm = DeviceFSM::new().start_tightening(params.clone());
+                s.device_fsm_state = DeviceFSMState::tightening(&fsm);
+            }
+
+            println!("Cycle {}/{}: Tightening started", cycle + 1, count);
+
+            // ================================================================
+            // Phase 2: Simulate tightening duration
+            // ================================================================
+
+            tokio::time::sleep(Duration::from_millis(duration_ms)).await;
+
+            // ================================================================
+            // Phase 3: TIGHTENING → EVALUATING
+            // ================================================================
+
+            // Complete the tightening and get result
+            let fsm = DeviceFSM::new().start_tightening(params);
+            let fsm = fsm.complete();
+            let outcome = fsm.result();
+
+            // Apply failure rate (override natural variation)
+            let seed = chrono::Local::now().timestamp_micros() as u64;
+            let random_value = (seed % 100) as f64 / 100.0;
+            let final_ok = if random_value < failure_rate {
+                false  // Force NOK based on failure rate
+            } else {
+                outcome.ok  // Use natural OK/NOK from FSM
+            };
+
+            // Update state to evaluating
+            {
+                let mut s = state.write().unwrap();
+                s.device_fsm_state = DeviceFSMState::evaluating(&fsm);
+            }
+
+            println!(
+                "Cycle {}/{}: Tightening complete - {} (torque: {:.2} Nm, angle: {:.1}°)",
+                cycle + 1,
+                count,
+                if final_ok { "OK" } else { "NOK" },
+                outcome.actual_torque,
+                outcome.actual_angle
+            );
+
+            // ================================================================
+            // Phase 4: Add to batch and broadcast
+            // ================================================================
+
+            let (result, batch_counter, batch_completed) = {
+                let mut s = state.write().unwrap();
+                let info = s.batch_manager.add_tightening(final_ok);
+
+                let batch_status = match info.batch_status {
+                    crate::batch_manager::BatchStatus::NotFinished => None,
+                    crate::batch_manager::BatchStatus::CompletedOk => Some(true),
+                    crate::batch_manager::BatchStatus::CompletedNok => Some(false),
+                };
+
+                let result = TighteningResult {
+                    cell_id: s.cell_id,
+                    channel_id: s.channel_id,
+                    controller_name: s.controller_name.clone(),
+                    vin_number: s.vehicle_id.clone(),
+                    job_id: s.current_job_id.unwrap_or(1),
+                    pset_id: s.current_pset_id.unwrap_or(1),
+                    batch_size: s.batch_manager.target_size(),
+                    batch_counter: info.counter,
+                    tightening_status: final_ok,
+                    torque_status: outcome.torque_ok,
+                    angle_status: outcome.angle_ok,
+                    torque_min: 10.0,
+                    torque_max: 15.0,
+                    torque_target: 12.5,
+                    torque: outcome.actual_torque,
+                    angle_min: 30.0,
+                    angle_max: 50.0,
+                    angle_target: 40.0,
+                    angle: outcome.actual_angle,
+                    timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
+                    last_pset_change: None,
+                    batch_status,
+                    tightening_id: Some(info.tightening_id),
+                };
+
+                let batch_completed = s.batch_manager.is_complete();
+
+                if batch_completed {
+                    s.batch_manager.reset();
+                }
+
+                (result, info.counter, batch_completed)
+            };
+
+            // Broadcast to subscribed TCP clients
+            let event = SimulatorEvent::TighteningCompleted { result };
+            let _ = broadcaster.send(event);
+
+            if batch_completed {
+                let batch_event = SimulatorEvent::BatchCompleted { total: batch_counter };
+                let _ = broadcaster.send(batch_event);
+                println!("Batch completed with {} tightenings", batch_counter);
+            }
+
+            // ================================================================
+            // Phase 5: EVALUATING → IDLE
+            // ================================================================
+
+            {
+                let mut s = state.write().unwrap();
+                s.device_fsm_state = DeviceFSMState::idle();
+            }
+
+            // Wait before next cycle (unless this was the last one)
+            if cycle < count - 1 {
+                tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+            }
+        }
+
+        println!("Automated tightening completed");
+    });
+
+    (
+        StatusCode::OK,
+        Json(AutoTighteningResponse {
+            success: true,
+            message: format!("Started automated tightening: {} cycles", count),
+            count,
+            duration_ms,
+            interval_ms,
+        }),
+    )
 }
