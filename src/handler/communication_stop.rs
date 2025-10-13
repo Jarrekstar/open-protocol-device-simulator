@@ -1,32 +1,27 @@
+use crate::handler::data::{CommandAccepted};
 use crate::handler::{HandlerError, MidHandler};
-use crate::handler::data::CommandAccepted;
 use crate::protocol::{Message, Response};
 use crate::state::DeviceState;
 use std::sync::{Arc, RwLock};
 
-/// MID 0017 - Unsubscribe from pset selection
+/// MID 0003 - Communication stop request
 /// Responds with MID 0005 (Command accepted)
-pub struct PsetUnsubscribeHandler {
+pub struct CommunicationStopHandler {
     state: Arc<RwLock<DeviceState>>,
 }
 
-impl PsetUnsubscribeHandler {
+impl CommunicationStopHandler {
     pub fn new(state: Arc<RwLock<DeviceState>>) -> Self {
         Self { state }
     }
 }
 
-impl MidHandler for PsetUnsubscribeHandler {
+impl MidHandler for CommunicationStopHandler {
     fn handle(&self, message: &Message) -> Result<Response, HandlerError> {
-        println!("MID 0017: Pset selection unsubscribe request");
+        println!("MID 0003: Communication stop request");
 
-        // Update state to mark subscription as inactive
-        {
-            let mut state = self.state.write().unwrap();
-            state.pset_subscribed = false;
-        }
-
-        let ack_data = CommandAccepted::with_mid(17);
+        // Read device state to populate response
+        let ack_data = CommandAccepted::with_mid(3);
 
         // Respond with MID 0005 (Command accepted)
         Ok(Response::from_data(5, message.revision, ack_data))

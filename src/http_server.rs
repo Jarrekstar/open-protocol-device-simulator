@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -18,6 +19,7 @@ use std::time::Duration;
 struct ServerState {
     device_state: Arc<RwLock<DeviceState>>,
     broadcaster: EventBroadcaster,
+    auto_tightening_active: Arc<AtomicBool>,
 }
 
 /// Start the HTTP server for state inspection and simulation control
@@ -25,12 +27,15 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
     let server_state = ServerState {
         device_state: state,
         broadcaster,
+        auto_tightening_active: Arc::new(AtomicBool::new(false)),
     };
 
     let app = Router::new()
         .route("/state", get(get_state))
         .route("/simulate/tightening", post(simulate_tightening))
         .route("/auto-tightening/start", post(start_auto_tightening))
+        .route("/auto-tightening/stop", post(stop_auto_tightening))
+        .route("/auto-tightening/status", get(get_auto_tightening_status))
         .with_state(server_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
@@ -41,7 +46,9 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
     println!("Endpoints:");
     println!("  GET  /state                       - View device state");
     println!("  POST /simulate/tightening         - Simulate a single tightening operation");
-    println!("  POST /auto-tightening/start       - Start automated tightening simulation");
+    println!("  POST /auto-tightening/start       - Start automated tightening simulation (continuous)");
+    println!("  POST /auto-tightening/stop        - Stop automated tightening simulation");
+    println!("  GET  /auto-tightening/status      - Get auto-tightening status");
 
     axum::serve(listener, app)
         .await
@@ -133,10 +140,7 @@ async fn simulate_tightening(
 
         let batch_completed = state.batch_manager.is_complete();
 
-        // Auto-reset batch if completed
-        if batch_completed {
-            state.batch_manager.reset();
-        }
+        // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
 
         (result, info.counter, batch_completed)
     };
@@ -188,9 +192,6 @@ async fn simulate_tightening(
 
 #[derive(Deserialize)]
 struct AutoTighteningRequest {
-    /// Number of tightenings to simulate
-    #[serde(default = "default_count")]
-    count: u32,
     /// Time between tightening cycles in milliseconds
     #[serde(default = "default_interval")]
     interval_ms: u64,
@@ -202,7 +203,6 @@ struct AutoTighteningRequest {
     failure_rate: f64,
 }
 
-fn default_count() -> u32 { 10 }
 fn default_interval() -> u64 { 3000 }  // 3 seconds between cycles
 fn default_duration() -> u64 { 1500 }  // 1.5 second tightening
 fn default_failure_rate() -> f64 { 0.1 }  // 10% failure rate
@@ -211,18 +211,29 @@ fn default_failure_rate() -> f64 { 0.1 }  // 10% failure rate
 struct AutoTighteningResponse {
     success: bool,
     message: String,
-    count: u32,
     duration_ms: u64,
     interval_ms: u64,
 }
 
 /// Handler for POST /auto-tightening/start endpoint
-/// Starts an automated tightening simulation in the background
+/// Starts an automated tightening simulation in the background (continuous mode)
 async fn start_auto_tightening(
     AxumState(server_state): AxumState<ServerState>,
     Json(payload): Json<AutoTighteningRequest>,
 ) -> impl IntoResponse {
-    let count = payload.count;
+    // Check if auto-tightening is already running
+    if server_state.auto_tightening_active.load(Ordering::Relaxed) {
+        return (
+            StatusCode::CONFLICT,
+            Json(AutoTighteningResponse {
+                success: false,
+                message: "Auto-tightening already running. Stop it first.".to_string(),
+                duration_ms: 0,
+                interval_ms: 0,
+            }),
+        );
+    }
+
     let interval_ms = payload.interval_ms;
     let duration_ms = payload.duration_ms;
     let failure_rate = payload.failure_rate.clamp(0.0, 1.0);
@@ -230,21 +241,40 @@ async fn start_auto_tightening(
     // Clone state for background task
     let state = Arc::clone(&server_state.device_state);
     let broadcaster = server_state.broadcaster.clone();
+    let auto_active = Arc::clone(&server_state.auto_tightening_active);
+
+    // Set active flag
+    auto_active.store(true, Ordering::Relaxed);
 
     // Spawn background task
     tokio::spawn(async move {
-        println!("Starting automated tightening: {} cycles", count);
+        println!("Starting automated tightening (continuous mode)");
 
-        for cycle in 0..count {
-            // Check if tool is enabled before starting cycle
+        let mut cycle = 0u64;
+        while auto_active.load(Ordering::Relaxed) {
+            // Check if tool is enabled
             let tool_enabled = {
                 let s = state.read().unwrap();
                 s.tool_enabled
             };
 
             if !tool_enabled {
-                println!("Auto-tightening stopped: tool disabled at cycle {}/{}", cycle + 1, count);
+                println!("Auto-tightening stopped: tool disabled");
                 break;
+            }
+
+            // Check if there are bolts remaining to tighten
+            let (counter, target_size) = {
+                let s = state.read().unwrap();
+                (s.batch_manager.counter(), s.batch_manager.target_size())
+            };
+
+            let remaining_bolts = target_size.saturating_sub(counter);
+
+            if remaining_bolts == 0 {
+                // No work to do - wait for integrator to send new batch config
+                tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+                continue;
             }
 
             // ================================================================
@@ -260,7 +290,8 @@ async fn start_auto_tightening(
                 s.device_fsm_state = DeviceFSMState::tightening(&fsm);
             }
 
-            println!("Cycle {}/{}: Tightening started", cycle + 1, count);
+            cycle += 1;
+            println!("Cycle {}: Tightening started (remaining bolts: {})", cycle, remaining_bolts);
 
             // ================================================================
             // Phase 2: Simulate tightening duration
@@ -293,9 +324,8 @@ async fn start_auto_tightening(
             }
 
             println!(
-                "Cycle {}/{}: Tightening complete - {} (torque: {:.2} Nm, angle: {:.1}°)",
-                cycle + 1,
-                count,
+                "Cycle {}: Tightening complete - {} (torque: {:.2} Nm, angle: {:.1}°)",
+                cycle,
                 if final_ok { "OK" } else { "NOK" },
                 outcome.actual_torque,
                 outcome.actual_angle
@@ -343,9 +373,7 @@ async fn start_auto_tightening(
 
                 let batch_completed = s.batch_manager.is_complete();
 
-                if batch_completed {
-                    s.batch_manager.reset();
-                }
+                // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
 
                 (result, info.counter, batch_completed)
             };
@@ -369,23 +397,75 @@ async fn start_auto_tightening(
                 s.device_fsm_state = DeviceFSMState::idle();
             }
 
-            // Wait before next cycle (unless this was the last one)
-            if cycle < count - 1 {
-                tokio::time::sleep(Duration::from_millis(interval_ms)).await;
-            }
+            // Wait before next cycle
+            tokio::time::sleep(Duration::from_millis(interval_ms)).await;
         }
 
-        println!("Automated tightening completed");
+        // Reset active flag when loop exits
+        auto_active.store(false, Ordering::Relaxed);
+        println!("Automated tightening stopped");
     });
 
     (
         StatusCode::OK,
         Json(AutoTighteningResponse {
             success: true,
-            message: format!("Started automated tightening: {} cycles", count),
-            count,
+            message: "Auto-tightening started (continuous mode)".to_string(),
             duration_ms,
             interval_ms,
         }),
     )
+}
+
+/// Handler for POST /auto-tightening/stop endpoint
+/// Stops the automated tightening simulation
+async fn stop_auto_tightening(
+    AxumState(server_state): AxumState<ServerState>,
+) -> impl IntoResponse {
+    let was_running = server_state.auto_tightening_active.swap(false, Ordering::Relaxed);
+
+    if was_running {
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Auto-tightening stopped"
+            })),
+        )
+    } else {
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Auto-tightening was not running"
+            })),
+        )
+    }
+}
+
+/// Auto-tightening status response
+#[derive(Serialize)]
+struct AutoTighteningStatus {
+    running: bool,
+    counter: u32,
+    target_size: u32,
+    remaining_bolts: u32,
+}
+
+/// Handler for GET /auto-tightening/status endpoint
+/// Returns the current status of auto-tightening
+async fn get_auto_tightening_status(
+    AxumState(server_state): AxumState<ServerState>,
+) -> Json<AutoTighteningStatus> {
+    let running = server_state.auto_tightening_active.load(Ordering::Relaxed);
+    let state = server_state.device_state.read().unwrap();
+    let counter = state.batch_manager.counter();
+    let target = state.batch_manager.target_size();
+
+    Json(AutoTighteningStatus {
+        running,
+        counter,
+        target_size: target,
+        remaining_bolts: target.saturating_sub(counter),
+    })
 }

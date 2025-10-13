@@ -93,12 +93,10 @@ impl BatchManager {
     }
 
     /// Set a new target batch size
-    /// Resets the current batch if the size changes
+    /// Always resets the current batch (MID 0019 = start new batch)
     pub fn set_target_size(&mut self, new_size: u32) {
-        if new_size != self.target_size {
-            self.target_size = new_size;
-            self.reset();
-        }
+        self.target_size = new_size;
+        self.reset();
     }
 
     /// Get the batch status value for MID 0061 parameter 22
