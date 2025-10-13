@@ -4,7 +4,10 @@ pub mod data;
 pub mod keep_alive;
 pub mod pset_select;
 pub mod pset_subscription;
+pub mod pset_unsubscribe;
 pub mod tightening_result_subscription;
+pub mod tightening_result_unsubscribe;
+pub mod tightening_result_ack;
 pub mod tool_disable;
 pub mod tool_enable;
 pub mod vehicle_id;
@@ -21,6 +24,7 @@ pub enum HandlerError {
     UnknownMid(u16),
 
     #[error("Handler error: {0}")]
+    #[allow(dead_code)]
     Processing(String),
 }
 
@@ -70,13 +74,16 @@ pub fn create_default_registry(state: Arc<RwLock<DeviceState>>) -> HandlerRegist
 
     // Register all MID handlers (sorted by MID number)
     registry.register(1, Box::new(communication_start::CommunicationStartHandler::new(Arc::clone(&state))));
-    registry.register(14, Box::new(pset_subscription::PsetSubscriptionHandler));
+    registry.register(14, Box::new(pset_subscription::PsetSubscriptionHandler::new(Arc::clone(&state))));
+    registry.register(16, Box::new(pset_unsubscribe::PsetUnsubscribeHandler::new(Arc::clone(&state))));
     registry.register(18, Box::new(pset_select::PsetSelectHandler::new(Arc::clone(&state))));
     registry.register(19, Box::new(batch_size::BatchSizeHandler::new(Arc::clone(&state))));
     registry.register(42, Box::new(tool_disable::ToolDisableHandler::new(Arc::clone(&state))));
     registry.register(43, Box::new(tool_enable::ToolEnableHandler::new(Arc::clone(&state))));
     registry.register(52, Box::new(vehicle_id::VehicleIdHandler::new(Arc::clone(&state))));
-    registry.register(60, Box::new(tightening_result_subscription::TighteningResultSubscriptionHandler));
+    registry.register(60, Box::new(tightening_result_subscription::TighteningResultSubscriptionHandler::new(Arc::clone(&state))));
+    registry.register(62, Box::new(tightening_result_ack::TighteningResultAckHandler));
+    registry.register(63, Box::new(tightening_result_unsubscribe::TighteningResultUnsubscribeHandler::new(Arc::clone(&state))));
     registry.register(9999, Box::new(keep_alive::KeepAliveHandler));
 
     registry

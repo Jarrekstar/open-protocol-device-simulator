@@ -1,3 +1,4 @@
+use crate::batch_manager::BatchManager;
 use serde::Serialize;
 use std::sync::{Arc, RwLock};
 
@@ -15,8 +16,7 @@ pub struct DeviceState {
     pub current_pset_name: Option<String>,
 
     // Batch management
-    pub batch_size: u32,
-    pub batch_counter: u32,
+    pub batch_manager: BatchManager,
 
     // Tool state
     pub tool_enabled: bool,
@@ -40,8 +40,7 @@ impl DeviceState {
             supplier_code: "SIM".to_string(),
             current_pset_id: Some(1),
             current_pset_name: Some("Default".to_string()),
-            batch_size: 1,
-            batch_counter: 0,
+            batch_manager: BatchManager::new(1),
             tool_enabled: true,
             vehicle_id: None,
             current_job_id: Some(1),
@@ -55,16 +54,6 @@ impl DeviceState {
         Arc::new(RwLock::new(Self::new()))
     }
 
-    /// Reset batch counter
-    pub fn reset_batch_counter(&mut self) {
-        self.batch_counter = 0;
-    }
-
-    /// Increment batch counter
-    pub fn increment_batch_counter(&mut self) {
-        self.batch_counter += 1;
-    }
-
     /// Set the current parameter set
     pub fn set_pset(&mut self, pset_id: u32, pset_name: Option<String>) {
         self.current_pset_id = Some(pset_id);
@@ -73,8 +62,7 @@ impl DeviceState {
 
     /// Set batch size
     pub fn set_batch_size(&mut self, size: u32) {
-        self.batch_size = size;
-        self.reset_batch_counter();
+        self.batch_manager.set_target_size(size);
     }
 
     /// Enable the tool
@@ -93,6 +81,7 @@ impl DeviceState {
     }
 
     /// Clear vehicle ID
+    #[allow(dead_code)]
     pub fn clear_vehicle_id(&mut self) {
         self.vehicle_id = None;
     }
@@ -113,16 +102,16 @@ mod tests {
         let state = DeviceState::new();
         assert_eq!(state.cell_id, 1);
         assert_eq!(state.tool_enabled, true);
-        assert_eq!(state.batch_counter, 0);
+        assert_eq!(state.batch_manager.counter(), 0);
     }
 
     #[test]
-    fn test_batch_counter() {
+    fn test_batch_manager() {
         let mut state = DeviceState::new();
-        state.increment_batch_counter();
-        assert_eq!(state.batch_counter, 1);
-        state.reset_batch_counter();
-        assert_eq!(state.batch_counter, 0);
+        let info = state.batch_manager.add_tightening(true);
+        assert_eq!(info.counter, 1);
+        state.batch_manager.reset();
+        assert_eq!(state.batch_manager.counter(), 0);
     }
 
     #[test]
