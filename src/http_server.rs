@@ -100,15 +100,16 @@ async fn simulate_tightening(
     let (result, batch_counter, batch_completed) = {
         let mut state = server_state.device_state.write().unwrap();
 
-        // Add tightening to batch manager
-        let info = state.batch_manager.add_tightening(payload.ok);
+        // Add tightening to tracker
+        let info = state.tightening_tracker.add_tightening(payload.ok);
 
         // Determine batch_status for MID 0061 param 22
-        // None → 2 (not finished), Some(true) → 1 (OK), Some(false) → 0 (NOK)
+        // None → 2 (not finished or not used), Some(true) → 1 (OK), Some(false) → 0 (NOK)
         let batch_status = match info.batch_status {
             crate::batch_manager::BatchStatus::NotFinished => None,
             crate::batch_manager::BatchStatus::CompletedOk => Some(true),
             crate::batch_manager::BatchStatus::CompletedNok => Some(false),
+            crate::batch_manager::BatchStatus::NotUsed => None,
         };
 
         // Build tightening result from current state
@@ -119,7 +120,7 @@ async fn simulate_tightening(
             vin_number: state.vehicle_id.clone(),
             job_id: state.current_job_id.unwrap_or(1),
             pset_id: state.current_pset_id.unwrap_or(1),
-            batch_size: state.batch_manager.target_size(),
+            batch_size: state.tightening_tracker.batch_size(),
             batch_counter: info.counter,
             tightening_status: payload.ok,
             torque_status: payload.ok,
@@ -138,7 +139,7 @@ async fn simulate_tightening(
             tightening_id: Some(info.tightening_id),
         };
 
-        let batch_completed = state.batch_manager.is_complete();
+        let batch_completed = state.tightening_tracker.is_complete();
 
         // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
 
@@ -263,18 +264,26 @@ async fn start_auto_tightening(
                 break;
             }
 
-            // Check if there are bolts remaining to tighten
-            let (counter, target_size) = {
+            // Check if we should wait for new configuration
+            // In batch mode: waits when batch is complete
+            // In single mode: never waits (integrator controls via tool enable/disable)
+            let (should_wait, remaining) = {
                 let s = state.read().unwrap();
-                (s.batch_manager.counter(), s.batch_manager.target_size())
+                (s.tightening_tracker.should_wait_for_config(), s.tightening_tracker.remaining_work())
             };
 
-            let remaining_bolts = target_size.saturating_sub(counter);
-
-            if remaining_bolts == 0 {
-                // No work to do - wait for integrator to send new batch config
+            if should_wait {
+                // Batch complete - wait for integrator to send new batch config (MID 0019)
                 tokio::time::sleep(Duration::from_millis(interval_ms)).await;
                 continue;
+            }
+
+            // Log remaining work (only meaningful in batch mode)
+            if let Some(remaining_bolts) = remaining {
+                if remaining_bolts == 0 {
+                    tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+                    continue;
+                }
             }
 
             // ================================================================
@@ -291,7 +300,11 @@ async fn start_auto_tightening(
             }
 
             cycle += 1;
-            println!("Cycle {}: Tightening started (remaining bolts: {})", cycle, remaining_bolts);
+            if let Some(remaining_bolts) = remaining {
+                println!("Cycle {}: Tightening started (remaining bolts: {})", cycle, remaining_bolts);
+            } else {
+                println!("Cycle {}: Tightening started (single mode)", cycle);
+            }
 
             // ================================================================
             // Phase 2: Simulate tightening duration
@@ -337,12 +350,13 @@ async fn start_auto_tightening(
 
             let (result, batch_counter, batch_completed) = {
                 let mut s = state.write().unwrap();
-                let info = s.batch_manager.add_tightening(final_ok);
+                let info = s.tightening_tracker.add_tightening(final_ok);
 
                 let batch_status = match info.batch_status {
                     crate::batch_manager::BatchStatus::NotFinished => None,
                     crate::batch_manager::BatchStatus::CompletedOk => Some(true),
                     crate::batch_manager::BatchStatus::CompletedNok => Some(false),
+                    crate::batch_manager::BatchStatus::NotUsed => None,
                 };
 
                 let result = TighteningResult {
@@ -352,7 +366,7 @@ async fn start_auto_tightening(
                     vin_number: s.vehicle_id.clone(),
                     job_id: s.current_job_id.unwrap_or(1),
                     pset_id: s.current_pset_id.unwrap_or(1),
-                    batch_size: s.batch_manager.target_size(),
+                    batch_size: s.tightening_tracker.batch_size(),
                     batch_counter: info.counter,
                     tightening_status: final_ok,
                     torque_status: outcome.torque_ok,
@@ -371,7 +385,7 @@ async fn start_auto_tightening(
                     tightening_id: Some(info.tightening_id),
                 };
 
-                let batch_completed = s.batch_manager.is_complete();
+                let batch_completed = s.tightening_tracker.is_complete();
 
                 // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
 
@@ -459,8 +473,8 @@ async fn get_auto_tightening_status(
 ) -> Json<AutoTighteningStatus> {
     let running = server_state.auto_tightening_active.load(Ordering::Relaxed);
     let state = server_state.device_state.read().unwrap();
-    let counter = state.batch_manager.counter();
-    let target = state.batch_manager.target_size();
+    let counter = state.tightening_tracker.counter();
+    let target = state.tightening_tracker.batch_size();
 
     Json(AutoTighteningStatus {
         running,

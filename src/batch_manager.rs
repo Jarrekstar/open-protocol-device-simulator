@@ -9,6 +9,8 @@ pub enum BatchStatus {
     CompletedOk,
     /// Batch completed but has one or more NOK tightenings
     CompletedNok,
+    /// Batch mode not used (single tightening mode)
+    NotUsed,
 }
 
 /// Information about a tightening operation within a batch
