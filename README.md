@@ -32,9 +32,10 @@ This simulator implements the Atlas Copco Open Protocol specification, allowing 
 - **State Machine Architecture** - TypeState pattern for compile-time safety
 - **Batch Management** - Proper counter logic (OK-only increment) with retry support
 - **Event Broadcasting** - Real-time pub/sub for subscribed clients
-- **Automated Simulation** - Background tightening with configurable timing and failure rates
+- **Continuous Auto-Tightening** - Runs through multiple sequential batches until stopped
 - **Session Management** - Per-client connection tracking with subscription isolation
 - **Device Operational FSM** - Realistic state transitions (Idle → Tightening → Evaluating)
+- **Multi-Client Support** - Each TCP client gets isolated subscriptions and independent session state
 
 ## Quick Start
 
@@ -97,6 +98,8 @@ This starts two servers:
 │  - GET  /state                                          │
 │  - POST /simulate/tightening                            │
 │  - POST /auto-tightening/start                          │
+│  - POST /auto-tightening/stop                           │
+│  - GET  /auto-tightening/status                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -202,12 +205,11 @@ curl -X POST http://localhost:8081/simulate/tightening \
 
 All fields are optional (defaults: `torque=12.5`, `angle=40.0`, `ok=true`).
 
-#### Automated Tightening Simulation
+#### Automated Tightening Simulation (Continuous Mode)
 ```bash
 curl -X POST http://localhost:8081/auto-tightening/start \
   -H "Content-Type: application/json" \
   -d '{
-    "count": 20,
     "interval_ms": 2000,
     "duration_ms": 1500,
     "failure_rate": 0.15
@@ -215,10 +217,36 @@ curl -X POST http://localhost:8081/auto-tightening/start \
 ```
 
 Parameters:
-- `count`: Number of tightening cycles (default: 10)
 - `interval_ms`: Time between cycles in milliseconds (default: 3000)
 - `duration_ms`: Duration of each tightening in milliseconds (default: 1500)
 - `failure_rate`: Probability of NOK result, 0.0-1.0 (default: 0.1)
+
+**Behavior**: Auto-tightening runs continuously, checking for remaining bolts before each cycle:
+- If `remaining_bolts > 0`: Performs tightening
+- If `remaining_bolts == 0`: Waits for integrator to send new batch configuration (MID 0019)
+- Stops when: manually stopped via `/auto-tightening/stop` OR tool disabled (MID 0042)
+
+This enables realistic multi-batch workflows where the integrator orchestrates sequential batches (different psets, different bolt counts) within the same session.
+
+#### Stop Automated Tightening
+```bash
+curl -X POST http://localhost:8081/auto-tightening/stop
+```
+
+#### Check Auto-Tightening Status
+```bash
+curl http://localhost:8081/auto-tightening/status
+```
+
+Response:
+```json
+{
+  "running": true,
+  "counter": 2,
+  "target_size": 4,
+  "remaining_bolts": 2
+}
+```
 
 ### TCP Client Integration
 
@@ -315,18 +343,38 @@ curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": true}'
 # Continue with remaining bolts...
 ```
 
-### 3. Automated Load Testing
+### 3. Automated Multi-Batch Testing
 
 ```bash
-# Simulate 100 tightenings with 10% failure rate
+# Terminal 1: Start simulator
+cargo run
+
+# Terminal 2: Client subscribes
+echo '00200060001         001' | nc localhost 8080
+
+# Terminal 3: Start continuous auto-tightening
 curl -X POST http://localhost:8081/auto-tightening/start \
   -d '{
-    "count": 100,
-    "interval_ms": 500,
-    "duration_ms": 200,
+    "interval_ms": 1000,
+    "duration_ms": 500,
     "failure_rate": 0.10
   }'
+
+# Auto-tightening completes default batch (size=1), then waits...
+
+# Terminal 4: Integrator sends Batch 1 (engine bolts)
+echo '0025001900100030006' | nc localhost 8080  # 6 bolts
+# Auto-tightening resumes, completes 6 bolts, waits...
+
+# Terminal 4: Integrator sends Batch 2 (oil pan bolts)
+echo '0025001900100030008' | nc localhost 8080  # 8 bolts
+# Completes 8 more bolts, waits...
+
+# Terminal 5: Stop when done
+curl -X POST http://localhost:8081/auto-tightening/stop
 ```
+
+**Expected behavior**: Auto-tightening continuously processes batches as the integrator sends new configurations, simulating a realistic assembly line workflow.
 
 ## Open Protocol Specifics
 
@@ -372,6 +420,11 @@ Length (20 bytes)      Null terminator
 - Increments ONLY on OK tightenings
 - NOK tightening keeps counter at same position
 - Allows integrator to retry at same position
+
+**Batch Reset Behavior:**
+- Sending MID 0019 (set batch size) ALWAYS resets the batch (counter → 0)
+- This is true even if sending the same size as before
+- Enables sequential batches with same bolt count (e.g., 4 engine bolts, then 4 suspension bolts)
 
 **Tool Lock Control:**
 - Device does NOT auto-lock on NOK
@@ -454,26 +507,42 @@ cargo build --release
 
 ## Performance
 
-- **Concurrent clients**: Tested with 100+ simultaneous TCP connections
-- **Message throughput**: 1000+ messages/second
-- **Memory footprint**: ~5MB base + ~1KB per client
-- **Latency**: <1ms response time for MID handling
+The simulator is built with Tokio async runtime for efficient concurrent operation:
+
+- **Concurrent clients**: Supports multiple simultaneous TCP connections via tokio::spawn
+- **Lightweight**: Each client connection uses minimal resources (async task + subscription state)
+- **Non-blocking**: All I/O operations are asynchronous, preventing client blocking
+- **Scalable architecture**: Arc<RwLock<T>> for shared state, tokio::broadcast for pub/sub
+
+Performance characteristics depend on hardware and workload. For production deployments, benchmark with your specific use case.
 
 ## Limitations
 
-**Not Implemented:**
+**Not Yet Implemented:**
 - Link-layer acknowledgement (only application-level)
-- Multi-spindle coordination (MID 0090+)
+- Multi-spindle coordination (MID 0090-0103) - *design document available in `docs/multi-spindle-brd-tdd.md`*
 - Advanced job management (MID 0030-0039)
 - Alarm subscriptions (MID 0070-0078)
 - Result uploads (MID 0064-0065)
 - Time setting (MID 0080-0081)
+- Tool configuration (MID 0011-0013)
+- Advanced torque/angle curve data
 
-These can be added as needed for specific integration requirements.
+These features can be added as needed for specific integration requirements. See `docs/` directory for planned features.
+
+## Documentation
+
+Additional documentation is available in the `docs/` directory:
+
+- **`docs/multi-spindle-brd-tdd.md`** - Complete design document for multi-spindle mode implementation (MID 0090-0103)
+- **`docs/multi-device-simulation.md`** - Discussion about simulating multiple physical devices in one process (shelved feature)
+
+These documents provide detailed specifications for features that can be implemented as needed.
 
 ## Contributing
 
 Contributions are welcome! Areas for enhancement:
+- Multi-spindle mode implementation (see `docs/multi-spindle-brd-tdd.md`)
 - Additional MID implementations
 - More realistic torque/angle curve simulation
 - WebSocket support for browser-based clients
