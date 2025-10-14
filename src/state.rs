@@ -1,5 +1,5 @@
-use crate::batch_manager::BatchManager;
 use crate::device_fsm::DeviceFSMState;
+use crate::tightening_tracker::TighteningTracker;
 use serde::Serialize;
 use std::sync::{Arc, RwLock};
 
@@ -16,8 +16,8 @@ pub struct DeviceState {
     pub current_pset_id: Option<u32>,
     pub current_pset_name: Option<String>,
 
-    // Batch management
-    pub batch_manager: BatchManager,
+    // Tightening tracking (single mode or batch mode)
+    pub tightening_tracker: TighteningTracker,
 
     // Device operational state
     pub device_fsm_state: DeviceFSMState,
@@ -44,7 +44,7 @@ impl DeviceState {
             supplier_code: "SIM".to_string(),
             current_pset_id: Some(1),
             current_pset_name: Some("Default".to_string()),
-            batch_manager: BatchManager::new(1),
+            tightening_tracker: TighteningTracker::new(),
             device_fsm_state: DeviceFSMState::idle(),
             tool_enabled: true,
             vehicle_id: None,
@@ -65,9 +65,9 @@ impl DeviceState {
         self.current_pset_name = pset_name;
     }
 
-    /// Set batch size
+    /// Set batch size (enables batch mode)
     pub fn set_batch_size(&mut self, size: u32) {
-        self.batch_manager.set_target_size(size);
+        self.tightening_tracker.enable_batch(size);
     }
 
     /// Enable the tool
@@ -107,16 +107,20 @@ mod tests {
         let state = DeviceState::new();
         assert_eq!(state.cell_id, 1);
         assert_eq!(state.tool_enabled, true);
-        assert_eq!(state.batch_manager.counter(), 0);
+        assert_eq!(state.tightening_tracker.counter(), 0);
     }
 
     #[test]
-    fn test_batch_manager() {
+    fn test_tightening_tracker() {
         let mut state = DeviceState::new();
-        let info = state.batch_manager.add_tightening(true);
+        // In single mode, counter stays 0
+        let info = state.tightening_tracker.add_tightening(true);
+        assert_eq!(info.counter, 0);
+
+        // Enable batch mode
+        state.set_batch_size(2);
+        let info = state.tightening_tracker.add_tightening(true);
         assert_eq!(info.counter, 1);
-        state.batch_manager.reset();
-        assert_eq!(state.batch_manager.counter(), 0);
     }
 
     #[test]

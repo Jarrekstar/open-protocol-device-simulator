@@ -10,6 +10,7 @@ mod protocol;
 mod session;
 mod state;
 mod subscriptions;
+mod tightening_tracker;
 
 use events::SimulatorEvent;
 use state::DeviceState;
