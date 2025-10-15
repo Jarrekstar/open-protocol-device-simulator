@@ -12,10 +12,10 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub struct Message {
     #[allow(dead_code)]
-    pub length: u32,      // Total message length (bytes 0-3)
-    pub mid: u16,         // Message ID (bytes 4-7)
-    pub revision: u8,     // Protocol revision (bytes 8-10)
-    pub data: Vec<u8>,    // Optional MID-specific data (bytes 20+)
+    pub length: u32, // Total message length (bytes 0-3)
+    pub mid: u16,      // Message ID (bytes 4-7)
+    pub revision: u8,  // Protocol revision (bytes 8-10)
+    pub data: Vec<u8>, // Optional MID-specific data (bytes 20+)
 }
 
 /// Response message to be sent back
@@ -29,7 +29,11 @@ pub struct Response {
 impl Response {
     /// Create a new response with raw data
     pub fn new(mid: u16, revision: u8, data: Vec<u8>) -> Self {
-        Self { mid, revision, data }
+        Self {
+            mid,
+            revision,
+            data,
+        }
     }
 
     /// Create a response from a type that implements ResponseData

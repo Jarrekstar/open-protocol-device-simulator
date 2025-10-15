@@ -3,9 +3,9 @@ use tokio_util::bytes::BufMut;
 
 pub struct NullDelimitedCodec;
 
-impl NullDelimitedCodec{
+impl NullDelimitedCodec {
     pub fn new() -> Self {
-        NullDelimitedCodec{}
+        NullDelimitedCodec {}
     }
 }
 
@@ -27,7 +27,11 @@ impl tokio_util::codec::Decoder for NullDelimitedCodec {
 impl tokio_util::codec::Encoder<bytes::BytesMut> for NullDelimitedCodec {
     type Error = std::io::Error;
 
-    fn encode(&mut self, item: bytes::BytesMut, dst: &mut bytes::BytesMut) -> Result<(), Self::Error> {
+    fn encode(
+        &mut self,
+        item: bytes::BytesMut,
+        dst: &mut bytes::BytesMut,
+    ) -> Result<(), Self::Error> {
         dst.extend_from_slice(&item);
         dst.put_u8(0); // Append null byte
         Ok(())

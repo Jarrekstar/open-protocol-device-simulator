@@ -379,19 +379,23 @@ mod tests {
     #[test]
     fn test_subscription_isolation() {
         // Create two independent sessions
-        let mut session1 = ConnectionSession::new()
-            .connect(test_addr())
-            .authenticate();
+        let mut session1 = ConnectionSession::new().connect(test_addr()).authenticate();
 
-        let session2 = ConnectionSession::new()
-            .connect(test_addr())
-            .authenticate();
+        let session2 = ConnectionSession::new().connect(test_addr()).authenticate();
 
         // Subscribe session1 but not session2
         session1.subscribe_tightening_result();
 
         // Verify isolation
-        assert!(session1.subscriptions().is_subscribed_to_tightening_result());
-        assert!(!session2.subscriptions().is_subscribed_to_tightening_result());
+        assert!(
+            session1
+                .subscriptions()
+                .is_subscribed_to_tightening_result()
+        );
+        assert!(
+            !session2
+                .subscriptions()
+                .is_subscribed_to_tightening_result()
+        );
     }
 }

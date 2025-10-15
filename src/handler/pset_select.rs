@@ -1,3 +1,8 @@
+//! MID 0018 - Parameter set selection handler
+//!
+//! Selects a specific parameter set (pset) for tightening operations.
+//! Each pset defines torque/angle limits and tightening strategy.
+
 use crate::handler::{HandlerError, MidHandler};
 use crate::protocol::{Message, Response};
 use crate::state::DeviceState;

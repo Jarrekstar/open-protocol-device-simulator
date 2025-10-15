@@ -55,10 +55,18 @@ impl Subscriptions {
     /// Get count of active subscriptions
     pub fn active_count(&self) -> usize {
         let mut count = 0;
-        if self.tightening_result { count += 1; }
-        if self.pset_selection { count += 1; }
-        if self.alarm { count += 1; }
-        if self.job_info { count += 1; }
+        if self.tightening_result {
+            count += 1;
+        }
+        if self.pset_selection {
+            count += 1;
+        }
+        if self.alarm {
+            count += 1;
+        }
+        if self.job_info {
+            count += 1;
+        }
         count
     }
 

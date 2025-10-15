@@ -17,11 +17,10 @@ impl CommandAccepted {
     pub fn new() -> Self {
         Self { accepted_mid: 0 }
     }
-    
+
     pub fn with_mid(mid: u32) -> Self {
         Self { accepted_mid: mid }
     }
-    
 }
 
 impl Default for CommandAccepted {
@@ -29,4 +28,3 @@ impl Default for CommandAccepted {
         Self::new()
     }
 }
-

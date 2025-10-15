@@ -1,18 +1,14 @@
-use crate::handler::data::{CommandAccepted};
+use crate::handler::data::CommandAccepted;
 use crate::handler::{HandlerError, MidHandler};
 use crate::protocol::{Message, Response};
-use crate::state::DeviceState;
-use std::sync::{Arc, RwLock};
 
 /// MID 0003 - Communication stop request
 /// Responds with MID 0005 (Command accepted)
-pub struct CommunicationStopHandler {
-    state: Arc<RwLock<DeviceState>>,
-}
+pub struct CommunicationStopHandler;
 
 impl CommunicationStopHandler {
-    pub fn new(state: Arc<RwLock<DeviceState>>) -> Self {
-        Self { state }
+    pub fn new() -> Self {
+        Self
     }
 }
 
