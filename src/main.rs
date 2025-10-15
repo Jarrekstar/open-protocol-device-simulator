@@ -14,8 +14,8 @@ mod tightening_tracker;
 
 use events::SimulatorEvent;
 use state::DeviceState;
-use thiserror::Error;
 use std::sync::Arc;
+use thiserror::Error;
 
 #[tokio::main]
 async fn main() {

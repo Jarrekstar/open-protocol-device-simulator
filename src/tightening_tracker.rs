@@ -18,7 +18,7 @@ pub enum TighteningMode {
 #[derive(Debug, Clone, Serialize)]
 pub struct TighteningTracker {
     mode: TighteningMode,
-    tightening_sequence: u32,  // Global counter across all modes
+    tightening_sequence: u32, // Global counter across all modes
 }
 
 impl TighteningTracker {
@@ -87,7 +87,7 @@ impl TighteningTracker {
     /// Returns true in batch mode when batch is complete
     pub fn should_wait_for_config(&self) -> bool {
         match &self.mode {
-            TighteningMode::Single => false,  // Never wait in single mode
+            TighteningMode::Single => false, // Never wait in single mode
             TighteningMode::Batch(batch) => batch.is_complete(),
         }
     }
@@ -96,7 +96,7 @@ impl TighteningTracker {
     /// Returns None in single mode (infinite work), Some(n) in batch mode
     pub fn remaining_work(&self) -> Option<u32> {
         match &self.mode {
-            TighteningMode::Single => None,  // No concept of "remaining" in single mode
+            TighteningMode::Single => None, // No concept of "remaining" in single mode
             TighteningMode::Batch(batch) => {
                 Some(batch.target_size().saturating_sub(batch.counter()))
             }
@@ -106,7 +106,7 @@ impl TighteningTracker {
     /// Check if batch is complete (only relevant in batch mode)
     pub fn is_complete(&self) -> bool {
         match &self.mode {
-            TighteningMode::Single => false,  // Never "complete" in single mode
+            TighteningMode::Single => false, // Never "complete" in single mode
             TighteningMode::Batch(batch) => batch.is_complete(),
         }
     }
@@ -197,8 +197,8 @@ mod tests {
         let mut tracker = TighteningTracker::new();
         tracker.enable_batch(2);
 
-        tracker.add_tightening(true);   // counter: 1
-        tracker.add_tightening(false);  // counter: 1 (stays)
+        tracker.add_tightening(true); // counter: 1
+        tracker.add_tightening(false); // counter: 1 (stays)
 
         assert_eq!(tracker.counter(), 1);
         assert_eq!(tracker.remaining_work(), Some(1));
@@ -219,8 +219,8 @@ mod tests {
         tracker.enable_batch(3);
 
         let info = tracker.add_tightening(true);
-        assert_eq!(info.tightening_id, 3);  // Sequence continues
-        assert_eq!(info.counter, 1);        // Batch counter starts fresh
+        assert_eq!(info.tightening_id, 3); // Sequence continues
+        assert_eq!(info.counter, 1); // Batch counter starts fresh
     }
 
     #[test]
@@ -234,7 +234,7 @@ mod tests {
 
         // Enable new batch
         tracker.enable_batch(6);
-        assert_eq!(tracker.counter(), 0);  // Reset
+        assert_eq!(tracker.counter(), 0); // Reset
         assert_eq!(tracker.batch_size(), 6);
     }
 
@@ -261,6 +261,6 @@ mod tests {
         assert!(!tracker.should_wait_for_config());
 
         tracker.add_tightening(true);
-        assert!(tracker.should_wait_for_config());  // Batch complete, should wait
+        assert!(tracker.should_wait_for_config()); // Batch complete, should wait
     }
 }

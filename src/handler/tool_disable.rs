@@ -1,8 +1,13 @@
+//! MID 0042 - Tool disable handler
+//!
+//! Disables the tool to prevent tightening operations. When disabled, the device
+//! will not perform any tightenings regardless of trigger signals.
+
+use crate::handler::data::command_accepted::CommandAccepted;
 use crate::handler::{HandlerError, MidHandler};
 use crate::protocol::{Message, Response};
 use crate::state::DeviceState;
 use std::sync::{Arc, RwLock};
-use crate::handler::data::command_accepted::CommandAccepted;
 
 /// MID 0042 - Tool disable
 /// Disables the tool to prevent tightening operations
@@ -27,7 +32,6 @@ impl MidHandler for ToolDisableHandler {
         }
 
         let ack_data = CommandAccepted::with_mid(42);
-
 
         // Respond with MID 0005 (Command accepted)
         Ok(Response::from_data(5, message.revision, ack_data))

@@ -1,3 +1,8 @@
+//! MID 0001 - Communication start handler
+//!
+//! Handles the initial handshake between the integrator and the controller.
+//! This is typically the first message sent after TCP connection is established.
+
 use crate::handler::data::CommunicationStartAck;
 use crate::handler::{HandlerError, MidHandler};
 use crate::protocol::{Message, Response};

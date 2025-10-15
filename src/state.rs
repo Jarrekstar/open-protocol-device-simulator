@@ -28,10 +28,6 @@ pub struct DeviceState {
     // Vehicle/Job identification
     pub vehicle_id: Option<String>,
     pub current_job_id: Option<u32>,
-
-    // Subscription state
-    pub pset_subscribed: bool,
-    pub tightening_result_subscribed: bool,
 }
 
 impl DeviceState {
@@ -49,8 +45,6 @@ impl DeviceState {
             tool_enabled: true,
             vehicle_id: None,
             current_job_id: Some(1),
-            pset_subscribed: false,
-            tightening_result_subscribed: false,
         }
     }
 

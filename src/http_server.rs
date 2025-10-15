@@ -3,11 +3,11 @@ use crate::events::{EventBroadcaster, SimulatorEvent};
 use crate::handler::data::TighteningResult;
 use crate::state::DeviceState;
 use axum::{
+    Router,
     extract::State as AxumState,
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
-    Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,6 +20,50 @@ struct ServerState {
     device_state: Arc<RwLock<DeviceState>>,
     broadcaster: EventBroadcaster,
     auto_tightening_active: Arc<AtomicBool>,
+}
+
+/// Helper function to build a TighteningResult from device state and tightening info
+fn build_tightening_result(
+    state: &DeviceState,
+    info: &crate::batch_manager::TighteningInfo,
+    torque: f64,
+    angle: f64,
+    tightening_ok: bool,
+    torque_ok: bool,
+    angle_ok: bool,
+) -> TighteningResult {
+    let batch_status = match info.batch_status {
+        crate::batch_manager::BatchStatus::NotFinished => None,
+        crate::batch_manager::BatchStatus::CompletedOk => Some(true),
+        crate::batch_manager::BatchStatus::CompletedNok => Some(false),
+        crate::batch_manager::BatchStatus::NotUsed => None,
+    };
+
+    TighteningResult {
+        cell_id: state.cell_id,
+        channel_id: state.channel_id,
+        controller_name: state.controller_name.clone(),
+        vin_number: state.vehicle_id.clone(),
+        job_id: state.current_job_id.unwrap_or(1),
+        pset_id: state.current_pset_id.unwrap_or(1),
+        batch_size: state.tightening_tracker.batch_size(),
+        batch_counter: info.counter,
+        tightening_status: tightening_ok,
+        torque_status: torque_ok,
+        angle_status: angle_ok,
+        torque_min: 10.0,
+        torque_max: 15.0,
+        torque_target: 12.5,
+        torque,
+        angle_min: 30.0,
+        angle_max: 50.0,
+        angle_target: 40.0,
+        angle,
+        timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
+        last_pset_change: None,
+        batch_status,
+        tightening_id: Some(info.tightening_id),
+    }
 }
 
 /// Start the HTTP server for state inspection and simulation control
@@ -46,7 +90,9 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
     println!("Endpoints:");
     println!("  GET  /state                       - View device state");
     println!("  POST /simulate/tightening         - Simulate a single tightening operation");
-    println!("  POST /auto-tightening/start       - Start automated tightening simulation (continuous)");
+    println!(
+        "  POST /auto-tightening/start       - Start automated tightening simulation (continuous)"
+    );
     println!("  POST /auto-tightening/stop        - Stop automated tightening simulation");
     println!("  GET  /auto-tightening/status      - Get auto-tightening status");
 
@@ -56,9 +102,7 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
 }
 
 /// Handler for GET /state endpoint
-async fn get_state(
-    AxumState(server_state): AxumState<ServerState>,
-) -> Json<DeviceState> {
+async fn get_state(AxumState(server_state): AxumState<ServerState>) -> Json<DeviceState> {
     let state = server_state.device_state.read().unwrap();
     Json(state.clone())
 }
@@ -103,41 +147,16 @@ async fn simulate_tightening(
         // Add tightening to tracker
         let info = state.tightening_tracker.add_tightening(payload.ok);
 
-        // Determine batch_status for MID 0061 param 22
-        // None → 2 (not finished or not used), Some(true) → 1 (OK), Some(false) → 0 (NOK)
-        let batch_status = match info.batch_status {
-            crate::batch_manager::BatchStatus::NotFinished => None,
-            crate::batch_manager::BatchStatus::CompletedOk => Some(true),
-            crate::batch_manager::BatchStatus::CompletedNok => Some(false),
-            crate::batch_manager::BatchStatus::NotUsed => None,
-        };
-
         // Build tightening result from current state
-        let result = TighteningResult {
-            cell_id: state.cell_id,
-            channel_id: state.channel_id,
-            controller_name: state.controller_name.clone(),
-            vin_number: state.vehicle_id.clone(),
-            job_id: state.current_job_id.unwrap_or(1),
-            pset_id: state.current_pset_id.unwrap_or(1),
-            batch_size: state.tightening_tracker.batch_size(),
-            batch_counter: info.counter,
-            tightening_status: payload.ok,
-            torque_status: payload.ok,
-            angle_status: payload.ok,
-            torque_min: 10.0,
-            torque_max: 15.0,
-            torque_target: 12.5,
-            torque: payload.torque,
-            angle_min: 30.0,
-            angle_max: 50.0,
-            angle_target: 40.0,
-            angle: payload.angle,
-            timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
-            last_pset_change: None,
-            batch_status,
-            tightening_id: Some(info.tightening_id),
-        };
+        let result = build_tightening_result(
+            &state,
+            &info,
+            payload.torque,
+            payload.angle,
+            payload.ok,
+            payload.ok,
+            payload.ok,
+        );
 
         let batch_completed = state.tightening_tracker.is_complete();
 
@@ -154,7 +173,9 @@ async fn simulate_tightening(
 
     // If batch completed, emit batch completion event
     if batch_completed {
-        let batch_event = SimulatorEvent::BatchCompleted { total: batch_counter };
+        let batch_event = SimulatorEvent::BatchCompleted {
+            total: batch_counter,
+        };
         let _ = server_state.broadcaster.send(batch_event);
         println!("Batch completed with {} tightenings", batch_counter);
     }
@@ -166,7 +187,10 @@ async fn simulate_tightening(
                 StatusCode::OK,
                 Json(TighteningResponse {
                     success: true,
-                    message: format!("Tightening result broadcast to {} TCP client(s)", subscribers),
+                    message: format!(
+                        "Tightening result broadcast to {} TCP client(s)",
+                        subscribers
+                    ),
                     batch_counter,
                     subscribers,
                 }),
@@ -204,9 +228,15 @@ struct AutoTighteningRequest {
     failure_rate: f64,
 }
 
-fn default_interval() -> u64 { 3000 }  // 3 seconds between cycles
-fn default_duration() -> u64 { 1500 }  // 1.5 second tightening
-fn default_failure_rate() -> f64 { 0.1 }  // 10% failure rate
+fn default_interval() -> u64 {
+    3000
+} // 3 seconds between cycles
+fn default_duration() -> u64 {
+    1500
+} // 1.5 second tightening
+fn default_failure_rate() -> f64 {
+    0.1
+} // 10% failure rate
 
 #[derive(Serialize)]
 struct AutoTighteningResponse {
@@ -269,7 +299,10 @@ async fn start_auto_tightening(
             // In single mode: never waits (integrator controls via tool enable/disable)
             let (should_wait, remaining) = {
                 let s = state.read().unwrap();
-                (s.tightening_tracker.should_wait_for_config(), s.tightening_tracker.remaining_work())
+                (
+                    s.tightening_tracker.should_wait_for_config(),
+                    s.tightening_tracker.remaining_work(),
+                )
             };
 
             if should_wait {
@@ -301,7 +334,10 @@ async fn start_auto_tightening(
 
             cycle += 1;
             if let Some(remaining_bolts) = remaining {
-                println!("Cycle {}: Tightening started (remaining bolts: {})", cycle, remaining_bolts);
+                println!(
+                    "Cycle {}: Tightening started (remaining bolts: {})",
+                    cycle, remaining_bolts
+                );
             } else {
                 println!("Cycle {}: Tightening started (single mode)", cycle);
             }
@@ -325,9 +361,9 @@ async fn start_auto_tightening(
             let seed = chrono::Local::now().timestamp_micros() as u64;
             let random_value = (seed % 100) as f64 / 100.0;
             let final_ok = if random_value < failure_rate {
-                false  // Force NOK based on failure rate
+                false // Force NOK based on failure rate
             } else {
-                outcome.ok  // Use natural OK/NOK from FSM
+                outcome.ok // Use natural OK/NOK from FSM
             };
 
             // Update state to evaluating
@@ -352,38 +388,15 @@ async fn start_auto_tightening(
                 let mut s = state.write().unwrap();
                 let info = s.tightening_tracker.add_tightening(final_ok);
 
-                let batch_status = match info.batch_status {
-                    crate::batch_manager::BatchStatus::NotFinished => None,
-                    crate::batch_manager::BatchStatus::CompletedOk => Some(true),
-                    crate::batch_manager::BatchStatus::CompletedNok => Some(false),
-                    crate::batch_manager::BatchStatus::NotUsed => None,
-                };
-
-                let result = TighteningResult {
-                    cell_id: s.cell_id,
-                    channel_id: s.channel_id,
-                    controller_name: s.controller_name.clone(),
-                    vin_number: s.vehicle_id.clone(),
-                    job_id: s.current_job_id.unwrap_or(1),
-                    pset_id: s.current_pset_id.unwrap_or(1),
-                    batch_size: s.tightening_tracker.batch_size(),
-                    batch_counter: info.counter,
-                    tightening_status: final_ok,
-                    torque_status: outcome.torque_ok,
-                    angle_status: outcome.angle_ok,
-                    torque_min: 10.0,
-                    torque_max: 15.0,
-                    torque_target: 12.5,
-                    torque: outcome.actual_torque,
-                    angle_min: 30.0,
-                    angle_max: 50.0,
-                    angle_target: 40.0,
-                    angle: outcome.actual_angle,
-                    timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
-                    last_pset_change: None,
-                    batch_status,
-                    tightening_id: Some(info.tightening_id),
-                };
+                let result = build_tightening_result(
+                    &s,
+                    &info,
+                    outcome.actual_torque,
+                    outcome.actual_angle,
+                    final_ok,
+                    outcome.torque_ok,
+                    outcome.angle_ok,
+                );
 
                 let batch_completed = s.tightening_tracker.is_complete();
 
@@ -397,7 +410,9 @@ async fn start_auto_tightening(
             let _ = broadcaster.send(event);
 
             if batch_completed {
-                let batch_event = SimulatorEvent::BatchCompleted { total: batch_counter };
+                let batch_event = SimulatorEvent::BatchCompleted {
+                    total: batch_counter,
+                };
                 let _ = broadcaster.send(batch_event);
                 println!("Batch completed with {} tightenings", batch_counter);
             }
@@ -436,7 +451,9 @@ async fn start_auto_tightening(
 async fn stop_auto_tightening(
     AxumState(server_state): AxumState<ServerState>,
 ) -> impl IntoResponse {
-    let was_running = server_state.auto_tightening_active.swap(false, Ordering::Relaxed);
+    let was_running = server_state
+        .auto_tightening_active
+        .swap(false, Ordering::Relaxed);
 
     if was_running {
         (

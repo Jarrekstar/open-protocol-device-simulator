@@ -27,15 +27,6 @@ impl Field {
         }
     }
 
-    /// Create a field from a float value
-    pub fn from_float(id: Option<u8>, value: f64, width: usize, precision: usize) -> Self {
-        let id = id.map(|v| format!("{:02}", v));
-        Self {
-            id,
-            value: format!("{:0width$.precision$}", value, width = width, precision = precision),
-        }
-    }
-
     /// Create a field from a string value with fixed width (space-padded)
     pub fn from_str(id: Option<u8>, value: impl AsRef<str>, width: usize) -> Self {
         let s = value.as_ref();
@@ -45,10 +36,7 @@ impl Field {
             format!("{:<width$}", s, width = width)
         };
         let id = id.map(|v| format!("{:02}", v));
-        Self {
-            id,
-            value: padded,
-        }
+        Self { id, value: padded }
     }
 
     /// Serialize this field in Open Protocol format
@@ -84,10 +72,6 @@ impl FieldBuilder {
 
     pub fn add_int(self, id: Option<u8>, value: i32, width: usize) -> Self {
         self.add_field(Field::from_int(id, value, width))
-    }
-
-    pub fn add_float(self, id: Option<u8>, value: f64, width: usize, precision: usize) -> Self {
-        self.add_field(Field::from_float(id, value, width, precision))
     }
 
     pub fn add_str(self, id: Option<u8>, value: impl AsRef<str>, width: usize) -> Self {

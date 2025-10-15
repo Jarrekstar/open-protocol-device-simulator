@@ -187,8 +187,7 @@ impl DeviceFSM<Tightening> {
         let actual_angle = params.target_angle * (0.95 + variation2);
 
         // Check if within acceptable limits
-        let torque_ok =
-            actual_torque >= params.torque_min && actual_torque <= params.torque_max;
+        let torque_ok = actual_torque >= params.torque_min && actual_torque <= params.torque_max;
         let angle_ok = actual_angle >= params.angle_min && actual_angle <= params.angle_max;
 
         DeviceFSM {
@@ -440,7 +439,11 @@ mod tests {
         let snapshot = DeviceFSMState::tightening(&fsm);
 
         match snapshot {
-            DeviceFSMState::Tightening { progress, target_torque, .. } => {
+            DeviceFSMState::Tightening {
+                progress,
+                target_torque,
+                ..
+            } => {
                 assert!(progress >= 0.0);
                 assert_eq!(target_torque, 12.5);
             }
@@ -457,7 +460,12 @@ mod tests {
         let snapshot = DeviceFSMState::evaluating(&fsm);
 
         match snapshot {
-            DeviceFSMState::Evaluating { ok, torque_ok, angle_ok, .. } => {
+            DeviceFSMState::Evaluating {
+                ok,
+                torque_ok,
+                angle_ok,
+                ..
+            } => {
                 // All should be boolean
                 assert!(ok == true || ok == false);
                 assert!(torque_ok == true || torque_ok == false);
