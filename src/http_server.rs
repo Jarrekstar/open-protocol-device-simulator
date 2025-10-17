@@ -1,7 +1,7 @@
 use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
 use crate::events::{EventBroadcaster, SimulatorEvent};
 use crate::handler::data::TighteningResult;
-use crate::multi_spindle::{generate_multi_spindle_results, MultiSpindleStatus};
+use crate::multi_spindle::{MultiSpindleStatus, generate_multi_spindle_results};
 use crate::state::DeviceState;
 use axum::{
     Router,

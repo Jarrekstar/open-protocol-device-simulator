@@ -28,9 +28,7 @@ impl ResponseData for VehicleIdBroadcast {
             format!("{:<25}", self.vin_number)
         };
 
-        FieldBuilder::new()
-            .add_str(None, &vin, 25)
-            .build()
+        FieldBuilder::new().add_str(None, &vin, 25).build()
     }
 }
 
@@ -56,7 +54,9 @@ mod tests {
 
     #[test]
     fn test_vehicle_id_broadcast_long_vin() {
-        let broadcast = VehicleIdBroadcast::new("THIS_IS_A_VERY_LONG_VIN_NUMBER_THAT_EXCEEDS_25_CHARS".to_string());
+        let broadcast = VehicleIdBroadcast::new(
+            "THIS_IS_A_VERY_LONG_VIN_NUMBER_THAT_EXCEEDS_25_CHARS".to_string(),
+        );
         let data = broadcast.serialize();
         assert_eq!(data.len(), 25);
         assert_eq!(&data[..], b"THIS_IS_A_VERY_LONG_VIN_N");

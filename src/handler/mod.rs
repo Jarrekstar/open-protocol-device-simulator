@@ -113,17 +113,43 @@ pub fn create_default_registry(state: Arc<RwLock<DeviceState>>) -> HandlerRegist
     );
     registry.register(
         50,
-        Box::new(vehicle_id_download::VehicleIdDownloadHandler::new(Arc::clone(&state))),
+        Box::new(vehicle_id_download::VehicleIdDownloadHandler::new(
+            Arc::clone(&state),
+        )),
     );
-    registry.register(51, Box::new(vehicle_id_subscription::VehicleIdSubscriptionHandler));
+    registry.register(
+        51,
+        Box::new(vehicle_id_subscription::VehicleIdSubscriptionHandler),
+    );
     registry.register(53, Box::new(vehicle_id_ack::VehicleIdAckHandler));
-    registry.register(54, Box::new(vehicle_id_unsubscribe::VehicleIdUnsubscribeHandler));
-    registry.register(90, Box::new(multi_spindle_status_subscribe::MultiSpindleStatusSubscribeHandler));
-    registry.register(92, Box::new(multi_spindle_status_unsubscribe::MultiSpindleStatusUnsubscribeHandler));
-    registry.register(93, Box::new(multi_spindle_status_ack::MultiSpindleStatusAckHandler));
-    registry.register(100, Box::new(multi_spindle_result_subscribe::MultiSpindleResultSubscribeHandler));
-    registry.register(102, Box::new(multi_spindle_result_ack::MultiSpindleResultAckHandler));
-    registry.register(103, Box::new(multi_spindle_result_unsubscribe::MultiSpindleResultUnsubscribeHandler));
+    registry.register(
+        54,
+        Box::new(vehicle_id_unsubscribe::VehicleIdUnsubscribeHandler),
+    );
+    registry.register(
+        90,
+        Box::new(multi_spindle_status_subscribe::MultiSpindleStatusSubscribeHandler),
+    );
+    registry.register(
+        92,
+        Box::new(multi_spindle_status_unsubscribe::MultiSpindleStatusUnsubscribeHandler),
+    );
+    registry.register(
+        93,
+        Box::new(multi_spindle_status_ack::MultiSpindleStatusAckHandler),
+    );
+    registry.register(
+        100,
+        Box::new(multi_spindle_result_subscribe::MultiSpindleResultSubscribeHandler),
+    );
+    registry.register(
+        102,
+        Box::new(multi_spindle_result_ack::MultiSpindleResultAckHandler),
+    );
+    registry.register(
+        103,
+        Box::new(multi_spindle_result_unsubscribe::MultiSpindleResultUnsubscribeHandler),
+    );
     registry.register(
         60,
         Box::new(tightening_result_subscription::TighteningResultSubscriptionHandler),

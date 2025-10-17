@@ -41,16 +41,14 @@ impl MultiSpindleResultBroadcast {
             batch_counter,
             batch_status,
             // Default torque limits (50.00 Nm target, ±5.00 Nm range)
-            torque_min: 4500,  // 45.00 Nm
-            torque_max: 5500,  // 55.00 Nm
+            torque_min: 4500,    // 45.00 Nm
+            torque_max: 5500,    // 55.00 Nm
             torque_target: 5000, // 50.00 Nm
             // Default angle limits (180° target, ±10° range)
             angle_min: 170,
             angle_max: 190,
             angle_target: 180,
-            last_change_timestamp: chrono::Local::now()
-                .format("%Y-%m-%d:%H:%M:%S")
-                .to_string(),
+            last_change_timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
         }
     }
 }
@@ -158,8 +156,8 @@ mod tests {
         let spindle1 = SpindleResult {
             spindle_id: 1,
             channel_id: 1,
-            torque: 5000, // 50.00 Nm
-            angle: 1800,  // 180.0 degrees
+            torque: 5000,     // 50.00 Nm
+            angle: 1800,      // 180.0 degrees
             torque_status: 1, // OK
             angle_status: 0,  // OK
         };
@@ -167,8 +165,8 @@ mod tests {
         let spindle2 = SpindleResult {
             spindle_id: 2,
             channel_id: 2,
-            torque: 5100, // 51.00 Nm
-            angle: 1850,  // 185.0 degrees
+            torque: 5100,     // 51.00 Nm
+            angle: 1850,      // 185.0 degrees
             torque_status: 1, // OK
             angle_status: 0,  // OK
         };
@@ -179,11 +177,11 @@ mod tests {
         let broadcast = MultiSpindleResultBroadcast::new(
             result,
             "TEST_VIN_12345".to_string(),
-            1,   // job_id
-            10,  // pset_id
-            0,   // batch_size (not used)
-            0,   // batch_counter
-            2,   // batch_status (not used)
+            1,  // job_id
+            10, // pset_id
+            0,  // batch_size (not used)
+            0,  // batch_counter
+            2,  // batch_status (not used)
         );
 
         let data = broadcast.serialize();
@@ -226,15 +224,7 @@ mod tests {
         let spindles = vec![spindle1, spindle2];
         let result = MultiSpindleResult::new(1, 100, spindles);
 
-        let broadcast = MultiSpindleResultBroadcast::new(
-            result,
-            "VIN".to_string(),
-            1,
-            10,
-            0,
-            0,
-            2,
-        );
+        let broadcast = MultiSpindleResultBroadcast::new(result, "VIN".to_string(), 1, 10, 0, 0, 2);
 
         let data = broadcast.serialize();
         let data_str = String::from_utf8_lossy(&data);
