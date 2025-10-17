@@ -17,10 +17,10 @@ use std::time::Duration;
 
 /// Shared state for HTTP server
 #[derive(Clone)]
-struct ServerState {
-    device_state: Arc<RwLock<DeviceState>>,
-    broadcaster: EventBroadcaster,
-    auto_tightening_active: Arc<AtomicBool>,
+pub struct ServerState {
+    pub device_state: Arc<RwLock<DeviceState>>,
+    pub broadcaster: EventBroadcaster,
+    pub auto_tightening_active: Arc<AtomicBool>,
 }
 
 /// Helper function to build a TighteningResult from device state and tightening info
@@ -67,22 +67,27 @@ fn build_tightening_result(
     }
 }
 
-/// Start the HTTP server for state inspection and simulation control
-pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: EventBroadcaster) {
+/// Create the HTTP router with all endpoints configured
+pub fn create_router(state: Arc<RwLock<DeviceState>>, broadcaster: EventBroadcaster) -> Router {
     let server_state = ServerState {
         device_state: state,
         broadcaster,
         auto_tightening_active: Arc::new(AtomicBool::new(false)),
     };
 
-    let app = Router::new()
+    Router::new()
         .route("/state", get(get_state))
         .route("/simulate/tightening", post(simulate_tightening))
         .route("/auto-tightening/start", post(start_auto_tightening))
         .route("/auto-tightening/stop", post(stop_auto_tightening))
         .route("/auto-tightening/status", get(get_auto_tightening_status))
         .route("/config/multi-spindle", post(configure_multi_spindle))
-        .with_state(server_state);
+        .with_state(server_state)
+}
+
+/// Start the HTTP server for state inspection and simulation control
+pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: EventBroadcaster) {
+    let app = create_router(state, broadcaster);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
         .await

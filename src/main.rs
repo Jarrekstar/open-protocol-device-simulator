@@ -1,22 +1,11 @@
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
-mod batch_manager;
-mod codec;
-mod device_fsm;
-mod events;
-mod handler;
-mod http_server;
-mod multi_spindle;
-mod protocol;
-mod session;
-mod state;
-mod subscriptions;
-mod tightening_tracker;
+use open_protocol_device_simulator::{codec, events, handler, http_server, protocol, session, state};
+use std::sync::Arc;
+use thiserror::Error;
 
 use events::SimulatorEvent;
 use state::DeviceState;
-use std::sync::Arc;
-use thiserror::Error;
 
 #[tokio::main]
 async fn main() {
