@@ -49,6 +49,7 @@ pub struct Connected {
     /// Remote client address
     pub addr: SocketAddr,
     /// When the connection was established
+    #[allow(dead_code)]
     pub connected_at: Instant,
 }
 
@@ -56,7 +57,8 @@ pub struct Connected {
 pub struct Ready {
     /// Remote client address
     pub addr: SocketAddr,
-    /// When the connection was established
+    /// When the connection was established (for connection duration tracking)
+    #[allow(dead_code)]
     pub connected_at: Instant,
     /// When we last received a message (for keep-alive tracking)
     pub last_activity: Instant,
@@ -110,11 +112,13 @@ impl Default for ConnectionSession<Disconnected> {
 
 impl ConnectionSession<Connected> {
     /// Get the client's socket address
+    #[allow(dead_code)]
     pub fn addr(&self) -> SocketAddr {
         self.state.addr
     }
 
     /// Get connection timestamp
+    #[allow(dead_code)]
     pub fn connected_at(&self) -> Instant {
         self.state.connected_at
     }
@@ -132,6 +136,7 @@ impl ConnectionSession<Connected> {
     }
 
     /// Disconnect and return to initial state
+    #[allow(dead_code)]
     pub fn disconnect(self) -> ConnectionSession<Disconnected> {
         ConnectionSession::new()
     }
@@ -148,11 +153,13 @@ impl ConnectionSession<Ready> {
     }
 
     /// Get connection timestamp
+    #[allow(dead_code)]
     pub fn connected_at(&self) -> Instant {
         self.state.connected_at
     }
 
     /// Get last activity timestamp
+    #[allow(dead_code)]
     pub fn last_activity(&self) -> Instant {
         self.state.last_activity
     }
@@ -163,11 +170,13 @@ impl ConnectionSession<Ready> {
     }
 
     /// Check if connection has timed out (Open Protocol: 15 second idle timeout)
+    #[allow(dead_code)]
     pub fn is_timed_out(&self, timeout_secs: u64) -> bool {
         self.state.last_activity.elapsed().as_secs() >= timeout_secs
     }
 
     /// Get mutable reference to subscriptions
+    #[allow(dead_code)]
     pub fn subscriptions_mut(&mut self) -> &mut Subscriptions {
         &mut self.state.subscriptions
     }
@@ -197,7 +206,38 @@ impl ConnectionSession<Ready> {
         self.state.subscriptions.unsubscribe_pset_selection();
     }
 
+    /// Subscribe to vehicle ID events (MID 51)
+    pub fn subscribe_vehicle_id(&mut self) {
+        self.state.subscriptions.subscribe_vehicle_id();
+    }
+
+    /// Unsubscribe from vehicle ID events (MID 54)
+    pub fn unsubscribe_vehicle_id(&mut self) {
+        self.state.subscriptions.unsubscribe_vehicle_id();
+    }
+
+    /// Subscribe to multi-spindle status events (MID 90)
+    pub fn subscribe_multi_spindle_status(&mut self) {
+        self.state.subscriptions.subscribe_multi_spindle_status();
+    }
+
+    /// Unsubscribe from multi-spindle status events (MID 92)
+    pub fn unsubscribe_multi_spindle_status(&mut self) {
+        self.state.subscriptions.unsubscribe_multi_spindle_status();
+    }
+
+    /// Subscribe to multi-spindle result events (MID 100)
+    pub fn subscribe_multi_spindle_result(&mut self) {
+        self.state.subscriptions.subscribe_multi_spindle_result();
+    }
+
+    /// Unsubscribe from multi-spindle result events (MID 102)
+    pub fn unsubscribe_multi_spindle_result(&mut self) {
+        self.state.subscriptions.unsubscribe_multi_spindle_result();
+    }
+
     /// Disconnect and return to initial state
+    #[allow(dead_code)]
     pub fn disconnect(self) -> ConnectionSession<Disconnected> {
         ConnectionSession::new()
     }

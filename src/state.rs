@@ -1,4 +1,5 @@
 use crate::device_fsm::DeviceFSMState;
+use crate::multi_spindle::MultiSpindleConfig;
 use crate::tightening_tracker::TighteningTracker;
 use serde::Serialize;
 use std::sync::{Arc, RwLock};
@@ -28,6 +29,9 @@ pub struct DeviceState {
     // Vehicle/Job identification
     pub vehicle_id: Option<String>,
     pub current_job_id: Option<u32>,
+
+    // Multi-spindle configuration
+    pub multi_spindle_config: MultiSpindleConfig,
 }
 
 impl DeviceState {
@@ -45,6 +49,7 @@ impl DeviceState {
             tool_enabled: true,
             vehicle_id: None,
             current_job_id: Some(1),
+            multi_spindle_config: MultiSpindleConfig::default(),
         }
     }
 
@@ -53,7 +58,7 @@ impl DeviceState {
         Arc::new(RwLock::new(Self::new()))
     }
 
-    /// Set the current parameter set
+    /// Set the parameter set
     pub fn set_pset(&mut self, pset_id: u32, pset_name: Option<String>) {
         self.current_pset_id = Some(pset_id);
         self.current_pset_name = pset_name;
@@ -83,6 +88,44 @@ impl DeviceState {
     #[allow(dead_code)]
     pub fn clear_vehicle_id(&mut self) {
         self.vehicle_id = None;
+    }
+
+    /// Enable multi-spindle mode
+    pub fn enable_multi_spindle(&mut self, spindle_count: u8, sync_id: u32) -> Result<(), String> {
+        let config = MultiSpindleConfig::new(spindle_count, sync_id);
+        if !config.is_valid() {
+            return Err(format!(
+                "Invalid multi-spindle configuration: spindle_count must be 2-16, got {}",
+                spindle_count
+            ));
+        }
+        self.multi_spindle_config = config;
+        Ok(())
+    }
+
+    /// Disable multi-spindle mode (revert to single-spindle)
+    pub fn disable_multi_spindle(&mut self) {
+        self.multi_spindle_config = MultiSpindleConfig::disable();
+    }
+
+    /// Check if multi-spindle mode is enabled
+    ///
+    /// Query method for checking multi-spindle state.
+    /// Used by webUI dashboard to display mode and by HTTP API endpoints
+    /// for status reporting and configuration validation.
+    #[allow(dead_code)]
+    pub fn is_multi_spindle_enabled(&self) -> bool {
+        self.multi_spindle_config.enabled
+    }
+
+    /// Get multi-spindle configuration
+    ///
+    /// Query method for accessing multi-spindle settings.
+    /// Used by webUI configuration panel to display and edit spindle
+    /// count and sync ID settings, and by HTTP API for configuration export.
+    #[allow(dead_code)]
+    pub fn get_multi_spindle_config(&self) -> &MultiSpindleConfig {
+        &self.multi_spindle_config
     }
 }
 

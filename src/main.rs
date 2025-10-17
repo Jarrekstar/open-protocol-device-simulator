@@ -6,6 +6,7 @@ mod device_fsm;
 mod events;
 mod handler;
 mod http_server;
+mod multi_spindle;
 mod protocol;
 mod session;
 mod state;
@@ -52,10 +53,10 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
             let mut framed = tokio_util::codec::Framed::new(stream, codec);
 
             // Create connection session with typestate pattern
-            // Start as Connected (TCP established), will transition to Ready after MID 0001
+            // Transitions: Disconnected → Connected → Ready
             let session = session::ConnectionSession::new();
             let session = session.connect(addr);
-            let mut session = session.authenticate(); // Immediately ready (simplified for now)
+            let mut session = session.authenticate(); // Immediate transition to Ready state
 
             loop {
                 tokio::select! {
@@ -78,7 +79,13 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                             60 => session.subscribe_tightening_result(),
                                             63 => session.unsubscribe_tightening_result(),
                                             14 => session.subscribe_pset_selection(),
-                                            16 => session.unsubscribe_pset_selection(),
+                                            17 => session.unsubscribe_pset_selection(),
+                                            51 => session.subscribe_vehicle_id(),
+                                            54 => session.unsubscribe_vehicle_id(),
+                                            90 => session.subscribe_multi_spindle_status(),
+                                            92 => session.unsubscribe_multi_spindle_status(),
+                                            100 => session.subscribe_multi_spindle_result(),
+                                            103 => session.unsubscribe_multi_spindle_result(),
                                             _ => {}
                                         }
 
@@ -92,6 +99,23 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                                 if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
                                                     eprintln!("send error: {e}");
                                                     break;
+                                                }
+
+                                                // Special handling for MID 51 (vehicle ID subscription)
+                                                // Send VIN immediately after subscription is confirmed
+                                                if message.mid == 51 {
+                                                    // VIN is empty because handlers don't have direct state access
+                                                    // VIN changes are broadcast via SimulatorEvent::VehicleIdChanged
+                                                    let current_vin = String::new();
+                                                    let vin_data = handler::data::VehicleIdBroadcast::new(current_vin.clone());
+                                                    let vin_response = protocol::Response::from_data(52, 1, vin_data);
+                                                    let vin_response_bytes = protocol::serializer::serialize_response(&vin_response);
+                                                    println!("Sending initial MID 0052 with current VIN: {}", current_vin);
+
+                                                    if let Err(e) = framed.send(vin_response_bytes.as_slice().into()).await {
+                                                        eprintln!("send error during initial VIN broadcast: {e}");
+                                                        break;
+                                                    }
                                                 }
                                             }
                                             Err(e) => {
@@ -156,6 +180,58 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                             SimulatorEvent::BatchCompleted { total } => {
                                 println!("Batch completed: {} tightenings", total);
                                 // Could send MID 0061 with batch status if subscribed
+                            }
+                            SimulatorEvent::VehicleIdChanged { vin } => {
+                                if session.subscriptions().is_subscribed_to_vehicle_id() {
+                                    println!("Broadcasting MID 0052 to subscribed client ({}): VIN {}", session.addr(), vin);
+                                    let vin_data = handler::data::VehicleIdBroadcast::new(vin);
+                                    let response = protocol::Response::from_data(52, 1, vin_data);
+                                    let response_bytes = protocol::serializer::serialize_response(&response);
+
+                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
+                                        eprintln!("send error during broadcast: {e}");
+                                        break;
+                                    }
+                                }
+                            }
+                            SimulatorEvent::MultiSpindleStatusCompleted { status } => {
+                                if session.subscriptions().is_subscribed_to_multi_spindle_status() {
+                                    println!("Broadcasting MID 0091 to subscribed client ({}): sync_id {}, status {}",
+                                        session.addr(), status.sync_id, status.status);
+                                    let status_data = handler::data::MultiSpindleStatusBroadcast::new(status);
+                                    let response = protocol::Response::from_data(91, 1, status_data);
+                                    let response_bytes = protocol::serializer::serialize_response(&response);
+
+                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
+                                        eprintln!("send error during broadcast: {e}");
+                                        break;
+                                    }
+                                }
+                            }
+                            SimulatorEvent::MultiSpindleResultCompleted { result } => {
+                                if session.subscriptions().is_subscribed_to_multi_spindle_result() {
+                                    println!("Broadcasting MID 0101 to subscribed client ({}): result_id {}, sync_id {}, status {}",
+                                        session.addr(), result.result_id, result.sync_id,
+                                        if result.is_ok() { "OK" } else { "NOK" });
+
+                                    // Create MID 0101 broadcast with multi-spindle result data
+                                    let result_data = handler::data::MultiSpindleResultBroadcast::new(
+                                        result,
+                                        String::new(), // VIN (not available in session context)
+                                        1,             // job_id
+                                        1,             // pset_id
+                                        0,             // batch_size
+                                        0,             // batch_counter
+                                        2,             // batch_status
+                                    );
+                                    let response = protocol::Response::from_data(101, 1, result_data);
+                                    let response_bytes = protocol::serializer::serialize_response(&response);
+
+                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
+                                        eprintln!("send error during broadcast: {e}");
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }

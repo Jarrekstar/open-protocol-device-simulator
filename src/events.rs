@@ -1,4 +1,5 @@
 use crate::handler::data::TighteningResult;
+use crate::multi_spindle::{MultiSpindleResult, MultiSpindleStatus};
 use tokio::sync::broadcast;
 
 /// Events that can be broadcast to all connected clients
@@ -16,6 +17,15 @@ pub enum SimulatorEvent {
 
     /// Batch was completed
     BatchCompleted { total: u32 },
+
+    /// Vehicle ID was changed
+    VehicleIdChanged { vin: String },
+
+    /// Multi-spindle status update completed
+    MultiSpindleStatusCompleted { status: MultiSpindleStatus },
+
+    /// Multi-spindle tightening result completed
+    MultiSpindleResultCompleted { result: MultiSpindleResult },
 }
 
 /// Type alias for the event broadcaster (sender side)

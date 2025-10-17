@@ -1,6 +1,7 @@
 use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
 use crate::events::{EventBroadcaster, SimulatorEvent};
 use crate::handler::data::TighteningResult;
+use crate::multi_spindle::{generate_multi_spindle_results, MultiSpindleStatus};
 use crate::state::DeviceState;
 use axum::{
     Router,
@@ -80,6 +81,7 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
         .route("/auto-tightening/start", post(start_auto_tightening))
         .route("/auto-tightening/stop", post(stop_auto_tightening))
         .route("/auto-tightening/status", get(get_auto_tightening_status))
+        .route("/config/multi-spindle", post(configure_multi_spindle))
         .with_state(server_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
@@ -95,6 +97,7 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
     );
     println!("  POST /auto-tightening/stop        - Stop automated tightening simulation");
     println!("  GET  /auto-tightening/status      - Get auto-tightening status");
+    println!("  POST /config/multi-spindle        - Configure multi-spindle mode");
 
     axum::serve(listener, app)
         .await
@@ -147,7 +150,7 @@ async fn simulate_tightening(
         // Add tightening to tracker
         let info = state.tightening_tracker.add_tightening(payload.ok);
 
-        // Build tightening result from current state
+        // Build tightening result from device state
         let result = build_tightening_result(
             &state,
             &info,
@@ -384,37 +387,127 @@ async fn start_auto_tightening(
             // Phase 4: Add to batch and broadcast
             // ================================================================
 
-            let (result, batch_counter, batch_completed) = {
-                let mut s = state.write().unwrap();
-                let info = s.tightening_tracker.add_tightening(final_ok);
-
-                let result = build_tightening_result(
-                    &s,
-                    &info,
-                    outcome.actual_torque,
-                    outcome.actual_angle,
-                    final_ok,
-                    outcome.torque_ok,
-                    outcome.angle_ok,
-                );
-
-                let batch_completed = s.tightening_tracker.is_complete();
-
-                // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
-
-                (result, info.counter, batch_completed)
+            // Check if multi-spindle mode is enabled
+            let (multi_spindle_enabled, multi_spindle_config) = {
+                let s = state.read().unwrap();
+                (
+                    s.multi_spindle_config.enabled,
+                    s.multi_spindle_config.clone(),
+                )
             };
 
-            // Broadcast to subscribed TCP clients
-            let event = SimulatorEvent::TighteningCompleted { result };
-            let _ = broadcaster.send(event);
+            if multi_spindle_enabled {
+                // ============================================================
+                // MULTI-SPINDLE PATH
+                // ============================================================
 
-            if batch_completed {
-                let batch_event = SimulatorEvent::BatchCompleted {
-                    total: batch_counter,
+                // Get result_id and pset_id before generating results
+                let (result_id, pset_id) = {
+                    let s = state.read().unwrap();
+                    (
+                        s.tightening_tracker.tightening_sequence() + 1, // Next sequence number
+                        s.current_pset_id.unwrap_or(1),
+                    )
                 };
-                let _ = broadcaster.send(batch_event);
-                println!("Batch completed with {} tightenings", batch_counter);
+
+                println!(
+                    "Cycle {}: Multi-spindle tightening - {} spindles (sync_id: {})",
+                    cycle, multi_spindle_config.spindle_count, multi_spindle_config.sync_id
+                );
+
+                // Broadcast "Running" status (MID 0091)
+                let running_status = MultiSpindleStatus::running(
+                    multi_spindle_config.sync_id,
+                    multi_spindle_config.spindle_count,
+                );
+                let _ = broadcaster.send(SimulatorEvent::MultiSpindleStatusCompleted {
+                    status: running_status,
+                });
+
+                // Generate multi-spindle results
+                let multi_result =
+                    generate_multi_spindle_results(&multi_spindle_config, result_id, pset_id);
+
+                // Log per-spindle results
+                for spindle in &multi_result.spindle_results {
+                    println!(
+                        "  Spindle {}: {} (torque: {:.2} Nm, angle: {:.1}°)",
+                        spindle.spindle_id,
+                        if spindle.is_ok() { "OK" } else { "NOK" },
+                        spindle.torque as f64 / 100.0,
+                        spindle.angle as f64 / 10.0
+                    );
+                }
+
+                // Determine overall status for tracker
+                let overall_ok = multi_result.is_ok();
+
+                // Broadcast multi-spindle result (MID 0101)
+                let _ = broadcaster.send(SimulatorEvent::MultiSpindleResultCompleted {
+                    result: multi_result,
+                });
+
+                // Broadcast "Completed" status (MID 0091)
+                let completed_status = MultiSpindleStatus::completed(
+                    multi_spindle_config.sync_id,
+                    multi_spindle_config.spindle_count,
+                );
+                let _ = broadcaster.send(SimulatorEvent::MultiSpindleStatusCompleted {
+                    status: completed_status,
+                });
+
+                // Update tracker with overall status
+                let (batch_counter, batch_completed) = {
+                    let mut s = state.write().unwrap();
+                    let info = s.tightening_tracker.add_tightening(overall_ok);
+                    let batch_completed = s.tightening_tracker.is_complete();
+                    (info.counter, batch_completed)
+                };
+
+                if batch_completed {
+                    let batch_event = SimulatorEvent::BatchCompleted {
+                        total: batch_counter,
+                    };
+                    let _ = broadcaster.send(batch_event);
+                    println!("Batch completed with {} tightenings", batch_counter);
+                }
+            } else {
+                // ============================================================
+                // SINGLE-SPINDLE PATH
+                // ============================================================
+
+                let (result, batch_counter, batch_completed) = {
+                    let mut s = state.write().unwrap();
+                    let info = s.tightening_tracker.add_tightening(final_ok);
+
+                    let result = build_tightening_result(
+                        &s,
+                        &info,
+                        outcome.actual_torque,
+                        outcome.actual_angle,
+                        final_ok,
+                        outcome.torque_ok,
+                        outcome.angle_ok,
+                    );
+
+                    let batch_completed = s.tightening_tracker.is_complete();
+
+                    // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
+
+                    (result, info.counter, batch_completed)
+                };
+
+                // Broadcast to subscribed TCP clients
+                let event = SimulatorEvent::TighteningCompleted { result };
+                let _ = broadcaster.send(event);
+
+                if batch_completed {
+                    let batch_event = SimulatorEvent::BatchCompleted {
+                        total: batch_counter,
+                    };
+                    let _ = broadcaster.send(batch_event);
+                    println!("Batch completed with {} tightenings", batch_counter);
+                }
             }
 
             // ================================================================
@@ -484,7 +577,7 @@ struct AutoTighteningStatus {
 }
 
 /// Handler for GET /auto-tightening/status endpoint
-/// Returns the current status of auto-tightening
+/// Returns the status of auto-tightening
 async fn get_auto_tightening_status(
     AxumState(server_state): AxumState<ServerState>,
 ) -> Json<AutoTighteningStatus> {
@@ -499,4 +592,97 @@ async fn get_auto_tightening_status(
         target_size: target,
         remaining_bolts: target.saturating_sub(counter),
     })
+}
+
+// ============================================================================
+// Multi-Spindle Configuration
+// ============================================================================
+
+#[derive(Deserialize)]
+struct MultiSpindleConfigRequest {
+    /// Enable or disable multi-spindle mode
+    enabled: bool,
+    /// Number of spindles (2-16, only used if enabled=true)
+    #[serde(default = "default_spindle_count")]
+    spindle_count: u8,
+    /// Sync tightening ID (only used if enabled=true)
+    #[serde(default = "default_sync_id")]
+    sync_id: u32,
+}
+
+fn default_spindle_count() -> u8 {
+    2
+}
+fn default_sync_id() -> u32 {
+    1
+}
+
+#[derive(Serialize)]
+struct MultiSpindleConfigResponse {
+    success: bool,
+    message: String,
+    enabled: bool,
+    spindle_count: u8,
+    sync_id: u32,
+}
+
+/// Handler for POST /config/multi-spindle endpoint
+/// Configures multi-spindle mode (enable/disable)
+async fn configure_multi_spindle(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(payload): Json<MultiSpindleConfigRequest>,
+) -> impl IntoResponse {
+    let mut state = server_state.device_state.write().unwrap();
+
+    if payload.enabled {
+        // Enable multi-spindle mode
+        match state.enable_multi_spindle(payload.spindle_count, payload.sync_id) {
+            Ok(_) => {
+                println!(
+                    "Multi-spindle mode enabled: {} spindles, sync_id={}",
+                    payload.spindle_count, payload.sync_id
+                );
+                (
+                    StatusCode::OK,
+                    Json(MultiSpindleConfigResponse {
+                        success: true,
+                        message: format!(
+                            "Multi-spindle mode enabled with {} spindles",
+                            payload.spindle_count
+                        ),
+                        enabled: true,
+                        spindle_count: payload.spindle_count,
+                        sync_id: payload.sync_id,
+                    }),
+                )
+            }
+            Err(e) => {
+                eprintln!("Failed to enable multi-spindle mode: {}", e);
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(MultiSpindleConfigResponse {
+                        success: false,
+                        message: format!("Failed to enable multi-spindle mode: {}", e),
+                        enabled: false,
+                        spindle_count: 1,
+                        sync_id: 0,
+                    }),
+                )
+            }
+        }
+    } else {
+        // Disable multi-spindle mode
+        state.disable_multi_spindle();
+        println!("Multi-spindle mode disabled");
+        (
+            StatusCode::OK,
+            Json(MultiSpindleConfigResponse {
+                success: true,
+                message: "Multi-spindle mode disabled".to_string(),
+                enabled: false,
+                spindle_count: 1,
+                sync_id: 0,
+            }),
+        )
+    }
 }
