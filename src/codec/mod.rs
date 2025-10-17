@@ -1,1 +1,1 @@
-pub(crate) mod null_delimited_codec;
+pub mod null_delimited_codec;

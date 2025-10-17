@@ -465,7 +465,6 @@ mod tests {
 
     #[test]
     fn test_fsm_state_snapshot_idle() {
-        let fsm = DeviceFSM::new();
         let snapshot = DeviceFSMState::idle();
 
         match snapshot {
