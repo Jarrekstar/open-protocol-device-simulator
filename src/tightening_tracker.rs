@@ -36,7 +36,12 @@ impl TighteningTracker {
         self.mode = TighteningMode::Batch(BatchManager::new(size));
     }
 
-    /// Check if currently in batch mode
+    /// Check if in batch mode
+    ///
+    /// Mode query method for tightening operation state.
+    /// Used by webUI mode indicator to display "Single" vs "Batch"
+    /// operation mode, and by HTTP API status endpoints for mode reporting.
+    #[allow(dead_code)]
     pub fn is_batch_mode(&self) -> bool {
         matches!(self.mode, TighteningMode::Batch(_))
     }
@@ -73,7 +78,7 @@ impl TighteningTracker {
         }
     }
 
-    /// Get current counter value
+    /// Get counter value
     /// Returns 0 in single mode, batch counter in batch mode
     pub fn counter(&self) -> u32 {
         match &self.mode {
@@ -112,6 +117,11 @@ impl TighteningTracker {
     }
 
     /// Get global tightening sequence number
+    ///
+    /// Global counter query for statistics and reporting.
+    /// Used by webUI statistics dashboard to display total tightening
+    /// count across all modes, and by HTTP API metrics endpoints.
+    #[allow(dead_code)]
     pub fn tightening_sequence(&self) -> u32 {
         self.tightening_sequence
     }

@@ -16,18 +16,18 @@ pub enum BatchStatus {
 /// Information about a tightening operation within a batch
 #[derive(Debug, Clone)]
 pub struct TighteningInfo {
-    /// Current position in the batch (1-based)
+    /// Position in the batch (1-based)
     pub counter: u32,
     /// Unique tightening identifier
     pub tightening_id: u32,
-    /// Current batch status
+    /// Batch status
     pub batch_status: BatchStatus,
 }
 
 /// Manages batch state and lifecycle
 #[derive(Debug, Clone, Serialize)]
 pub struct BatchManager {
-    /// Current tightening counter within the batch
+    /// Tightening counter within the batch
     counter: u32,
     /// Target number of tightenings for this batch
     target_size: u32,
@@ -49,7 +49,7 @@ impl BatchManager {
     }
 
     /// Add a tightening result to the batch
-    /// Returns information about the tightening and current batch status
+    /// Returns information about the tightening and batch status
     ///
     /// Note: Counter only increments on OK tightenings. NOK tightenings
     /// don't advance position - this allows integrator to retry same position.
@@ -82,6 +82,11 @@ impl BatchManager {
     }
 
     /// Reset the batch for a new cycle
+    ///
+    /// Batch lifecycle management method.
+    /// Used by webUI "Reset Batch" button to manually reset batch state
+    /// without changing size, and by HTTP API endpoints for batch control.
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.counter = 0;
         self.completed = false;
@@ -89,7 +94,12 @@ impl BatchManager {
     }
 
     /// Set a new target batch size
-    /// Always resets the current batch (MID 0019 = start new batch)
+    /// Always resets the batch (MID 0019 = start new batch)
+    ///
+    /// Batch configuration method.
+    /// Used by webUI batch size configuration controls to dynamically
+    /// adjust batch size, and by HTTP API endpoints for runtime reconfiguration.
+    #[allow(dead_code)]
     pub fn set_target_size(&mut self, new_size: u32) {
         self.target_size = new_size;
         self.reset();
@@ -97,6 +107,11 @@ impl BatchManager {
 
     /// Get the batch status value for MID 0061 parameter 22
     /// Returns: 0 (NOK), 1 (OK), or 2 (not finished)
+    ///
+    /// Protocol encoding helper for batch status reporting.
+    /// Used in full MID 0061 tightening result broadcasts with complete
+    /// parameter support including batch status field (parameter 22).
+    #[allow(dead_code)]
     pub fn get_batch_status_value(&self) -> i32 {
         if !self.completed {
             2 // Not finished
@@ -112,7 +127,7 @@ impl BatchManager {
         self.completed
     }
 
-    /// Get the current counter value
+    /// Get the counter value
     pub fn counter(&self) -> u32 {
         self.counter
     }

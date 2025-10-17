@@ -38,6 +38,11 @@ pub struct Evaluating {
 }
 
 /// Error state - recoverable error occurred
+///
+/// FSM error state for handling tightening failures.
+/// Used in error simulation features for testing client error handling
+/// and recovery scenarios.
+#[allow(dead_code)]
 pub struct Error {
     /// Error classification
     pub code: ErrorCode,
@@ -99,7 +104,12 @@ pub struct TighteningOutcome {
 }
 
 /// Error codes for tightening operations
+///
+/// Classification of tightening errors for simulation and testing.
+/// Used by webUI error injection controls to simulate specific
+/// failure scenarios for client testing and validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[allow(dead_code)]
 pub enum ErrorCode {
     /// Tool was disabled during operation
     ToolDisabled,
@@ -154,11 +164,16 @@ impl Default for DeviceFSM<Idle> {
 
 impl DeviceFSM<Tightening> {
     /// Check if tightening duration has elapsed
+    ///
+    /// Duration completion check for tightening operations.
+    /// Used by auto-tightening loop to poll operation status and
+    /// determine when to transition to Evaluating state.
+    #[allow(dead_code)]
     pub fn is_complete(&self) -> bool {
         self.state.start_time.elapsed().as_millis() as u64 >= self.state.params.duration_ms
     }
 
-    /// Get current progress as a value from 0.0 to 1.0
+    /// Get progress as a value from 0.0 to 1.0
     pub fn progress(&self) -> f64 {
         let elapsed = self.state.start_time.elapsed().as_millis() as u64;
         (elapsed as f64 / self.state.params.duration_ms as f64).min(1.0)
@@ -206,6 +221,11 @@ impl DeviceFSM<Tightening> {
 
     /// Abort the tightening due to an error
     /// Transitions: Tightening → Error
+    ///
+    /// Error transition for handling tightening failures.
+    /// Used by webUI error injection feature to simulate mid-operation
+    /// failures (tool disable, timeout) for client testing.
+    #[allow(dead_code)]
     pub fn abort(self, code: ErrorCode) -> DeviceFSM<Error> {
         DeviceFSM {
             state: Error { code },
@@ -230,6 +250,11 @@ impl DeviceFSM<Evaluating> {
 
     /// Consume the result and return to Idle state
     /// Transitions: Evaluating → Idle
+    ///
+    /// Completion transition for returning to idle state.
+    /// Used by auto-tightening loop to complete the tightening cycle
+    /// and prepare for the next operation.
+    #[allow(dead_code)]
     pub fn finish(self) -> DeviceFSM<Idle> {
         DeviceFSM::new()
     }
@@ -241,12 +266,22 @@ impl DeviceFSM<Evaluating> {
 
 impl DeviceFSM<Error> {
     /// Get the error code
+    ///
+    /// Error code query for error state inspection.
+    /// Used by error reporting features to log and display specific
+    /// error types, and by webUI error dashboard for diagnostics.
+    #[allow(dead_code)]
     pub fn error_code(&self) -> ErrorCode {
         self.state.code
     }
 
     /// Clear the error and return to Idle state
     /// Transitions: Error → Idle
+    ///
+    /// Error recovery transition for returning to operational state.
+    /// Used by webUI "Clear Error" button and auto-recovery features
+    /// to reset device after simulated error conditions.
+    #[allow(dead_code)]
     pub fn clear_error(self) -> DeviceFSM<Idle> {
         DeviceFSM::new()
     }
@@ -274,6 +309,10 @@ pub enum DeviceFSMState {
         actual_torque: f64,
         actual_angle: f64,
     },
+    /// Error state variant for FSM snapshots.
+    /// Used for error state serialization in webUI error dashboard
+    /// and HTTP API error status reporting.
+    #[allow(dead_code)]
     Error {
         code: ErrorCode,
     },
@@ -308,6 +347,11 @@ impl DeviceFSMState {
     }
 
     /// Create error state snapshot
+    ///
+    /// Error state serialization for storing FSM error state.
+    /// Used by error monitoring features to capture and report error
+    /// states via webUI dashboard and HTTP API endpoints.
+    #[allow(dead_code)]
     pub fn error(fsm: &DeviceFSM<Error>) -> Self {
         DeviceFSMState::Error {
             code: fsm.error_code(),

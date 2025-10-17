@@ -1,6 +1,6 @@
 //! MID 0019 - Batch size handler
 //!
-//! Sets the batch size for the current parameter set. When received, the device
+//! Sets the batch size for the parameter set. When received, the device
 //! transitions to batch mode and tracks tightening progress through the batch.
 
 use crate::handler::data::command_accepted::CommandAccepted;
@@ -10,7 +10,7 @@ use crate::state::DeviceState;
 use std::sync::{Arc, RwLock};
 
 /// MID 0019 - Set batch size
-/// Sets the batch size for the current parameter set
+/// Sets the batch size for the parameter set
 pub struct BatchSizeHandler {
     state: Arc<RwLock<DeviceState>>,
 }

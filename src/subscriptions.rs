@@ -9,10 +9,19 @@ pub struct Subscriptions {
     /// Subscribed to parameter set selection events (MID 0015)
     pub pset_selection: bool,
 
-    /// Subscribed to alarm events (future support)
+    /// Subscribed to vehicle ID events (MID 0052)
+    pub vehicle_id: bool,
+
+    /// Subscribed to multi-spindle status events (MID 0091)
+    pub multi_spindle_status: bool,
+
+    /// Subscribed to multi-spindle result events (MID 0101)
+    pub multi_spindle_result: bool,
+
+    /// Subscribed to alarm events (not yet implemented)
     pub alarm: bool,
 
-    /// Subscribed to job info events (future support)
+    /// Subscribed to job info events (not yet implemented)
     pub job_info: bool,
 }
 
@@ -52,13 +61,72 @@ impl Subscriptions {
         self.pset_selection
     }
 
+    /// Subscribe to vehicle ID events
+    pub fn subscribe_vehicle_id(&mut self) {
+        self.vehicle_id = true;
+    }
+
+    /// Unsubscribe from vehicle ID events
+    pub fn unsubscribe_vehicle_id(&mut self) {
+        self.vehicle_id = false;
+    }
+
+    /// Check if subscribed to vehicle ID
+    pub fn is_subscribed_to_vehicle_id(&self) -> bool {
+        self.vehicle_id
+    }
+
+    /// Subscribe to multi-spindle status events
+    pub fn subscribe_multi_spindle_status(&mut self) {
+        self.multi_spindle_status = true;
+    }
+
+    /// Unsubscribe from multi-spindle status events
+    pub fn unsubscribe_multi_spindle_status(&mut self) {
+        self.multi_spindle_status = false;
+    }
+
+    /// Check if subscribed to multi-spindle status
+    pub fn is_subscribed_to_multi_spindle_status(&self) -> bool {
+        self.multi_spindle_status
+    }
+
+    /// Subscribe to multi-spindle result events
+    pub fn subscribe_multi_spindle_result(&mut self) {
+        self.multi_spindle_result = true;
+    }
+
+    /// Unsubscribe from multi-spindle result events
+    pub fn unsubscribe_multi_spindle_result(&mut self) {
+        self.multi_spindle_result = false;
+    }
+
+    /// Check if subscribed to multi-spindle result
+    pub fn is_subscribed_to_multi_spindle_result(&self) -> bool {
+        self.multi_spindle_result
+    }
+
     /// Get count of active subscriptions
+    ///
+    /// Diagnostic method for subscription statistics.
+    /// Used by webUI connection dashboard to display per-client
+    /// subscription counts and by monitoring/metrics endpoints.
+    #[allow(dead_code)]
     pub fn active_count(&self) -> usize {
         let mut count = 0;
         if self.tightening_result {
             count += 1;
         }
         if self.pset_selection {
+            count += 1;
+        }
+        if self.vehicle_id {
+            count += 1;
+        }
+        if self.multi_spindle_status {
+            count += 1;
+        }
+        if self.multi_spindle_result {
             count += 1;
         }
         if self.alarm {
@@ -71,6 +139,11 @@ impl Subscriptions {
     }
 
     /// Check if any subscriptions are active
+    ///
+    /// Convenience method for subscription status checks.
+    /// Used by connection lifecycle management to determine whether to
+    /// keep idle connections alive, and by webUI for client status display.
+    #[allow(dead_code)]
     pub fn has_any_subscription(&self) -> bool {
         self.active_count() > 0
     }
