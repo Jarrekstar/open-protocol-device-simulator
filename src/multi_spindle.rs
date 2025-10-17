@@ -93,7 +93,13 @@ impl SpindleResult {
     /// Convenience constructor for manual result creation with specific failure modes.
     /// Useful for simulating particular failure scenarios in testing and webUI.
     #[allow(dead_code)]
-    pub fn nok(spindle_id: u8, torque: i32, angle: i32, torque_failed: bool, angle_failed: bool) -> Self {
+    pub fn nok(
+        spindle_id: u8,
+        torque: i32,
+        angle: i32,
+        torque_failed: bool,
+        angle_failed: bool,
+    ) -> Self {
         Self {
             spindle_id,
             channel_id: spindle_id,
@@ -262,7 +268,7 @@ pub fn generate_multi_spindle_results(
 
     // Base values (will vary per spindle)
     let base_torque = 5000; // 50.00 Nm
-    let base_angle = 1800;  // 180.0 degrees
+    let base_angle = 1800; // 180.0 degrees
 
     for spindle_id in 1..=config.spindle_count {
         // Add slight variation per spindle (±10%)
@@ -333,7 +339,7 @@ mod tests {
         let result = SpindleResult::nok(2, 4500, 1750, true, false);
         assert_eq!(result.spindle_id, 2);
         assert_eq!(result.torque_status, 1); // NOK
-        assert_eq!(result.angle_status, 0);   // OK
+        assert_eq!(result.angle_status, 0); // OK
         assert!(!result.is_ok());
     }
 
