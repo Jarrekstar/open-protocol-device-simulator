@@ -1,26 +1,62 @@
 use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
-use crate::events::{EventBroadcaster, SimulatorEvent};
+use crate::events::SimulatorEvent;
 use crate::handler::data::TighteningResult;
 use crate::multi_spindle::{MultiSpindleStatus, generate_multi_spindle_results};
+use crate::observable_state::ObservableState;
+use crate::pset::{self, SharedPsetRepository};
 use crate::state::DeviceState;
 use axum::{
     Router,
-    extract::State as AxumState,
+    extract::{
+        Path,
+        State as AxumState,
+        WebSocketUpgrade,
+        ws::{Message, WebSocket},
+    },
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
 };
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
+use tower_http::cors::{CorsLayer, Any};
 
 /// Shared state for HTTP server
 #[derive(Clone)]
 pub struct ServerState {
-    pub device_state: Arc<RwLock<DeviceState>>,
-    pub broadcaster: EventBroadcaster,
+    pub observable_state: ObservableState,
     pub auto_tightening_active: Arc<AtomicBool>,
+    pub pset_repository: SharedPsetRepository,
+}
+
+/// Get TighteningParams from selected PSET, or default if no PSET selected
+fn get_tightening_params(
+    pset_id: Option<u32>,
+    pset_repo: &SharedPsetRepository,
+    duration_ms: u64,
+) -> TighteningParams {
+    if let Some(id) = pset_id {
+        let repo = pset_repo.read().unwrap();
+        if let Some(pset) = repo.get_by_id(id) {
+            let target_torque = (pset.torque_min + pset.torque_max) / 2.0;
+            let target_angle = (pset.angle_min + pset.angle_max) / 2.0;
+            return TighteningParams {
+                target_torque,
+                torque_min: pset.torque_min,
+                torque_max: pset.torque_max,
+                target_angle,
+                angle_min: pset.angle_min,
+                angle_max: pset.angle_max,
+                duration_ms,
+            };
+        }
+    }
+
+    // Fall back to default if no PSET selected
+    TighteningParams::default_test()
 }
 
 /// Helper function to build a TighteningResult from device state and tightening info
@@ -32,6 +68,7 @@ fn build_tightening_result(
     tightening_ok: bool,
     torque_ok: bool,
     angle_ok: bool,
+    params: &TighteningParams,
 ) -> TighteningResult {
     let batch_status = match info.batch_status {
         crate::batch_manager::BatchStatus::NotFinished => None,
@@ -52,13 +89,13 @@ fn build_tightening_result(
         tightening_status: tightening_ok,
         torque_status: torque_ok,
         angle_status: angle_ok,
-        torque_min: 10.0,
-        torque_max: 15.0,
-        torque_target: 12.5,
+        torque_min: params.torque_min,
+        torque_max: params.torque_max,
+        torque_target: params.target_torque,
         torque,
-        angle_min: 30.0,
-        angle_max: 50.0,
-        angle_target: 40.0,
+        angle_min: params.angle_min,
+        angle_max: params.angle_max,
+        angle_target: params.target_angle,
         angle,
         timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
         last_pset_change: None,
@@ -68,12 +105,23 @@ fn build_tightening_result(
 }
 
 /// Create the HTTP router with all endpoints configured
-pub fn create_router(state: Arc<RwLock<DeviceState>>, broadcaster: EventBroadcaster) -> Router {
+pub fn create_router(observable_state: ObservableState) -> Router {
+    let pset_repository = crate::pset::create_sqlite_repository("simulator.db")
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to create SQLite repository: {}. Falling back to in-memory.", e);
+            crate::pset::create_default_repository()
+        });
+
     let server_state = ServerState {
-        device_state: state,
-        broadcaster,
+        observable_state,
         auto_tightening_active: Arc::new(AtomicBool::new(false)),
+        pset_repository,
     };
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
 
     Router::new()
         .route("/state", get(get_state))
@@ -82,12 +130,17 @@ pub fn create_router(state: Arc<RwLock<DeviceState>>, broadcaster: EventBroadcas
         .route("/auto-tightening/stop", post(stop_auto_tightening))
         .route("/auto-tightening/status", get(get_auto_tightening_status))
         .route("/config/multi-spindle", post(configure_multi_spindle))
+        .route("/psets", get(get_psets).post(create_pset))
+        .route("/psets/{id}", get(get_pset_by_id).put(update_pset).delete(delete_pset))
+        .route("/psets/{id}/select", post(select_pset))
+        .route("/ws/events", get(websocket_handler))
+        .layer(cors)
         .with_state(server_state)
 }
 
 /// Start the HTTP server for state inspection and simulation control
-pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: EventBroadcaster) {
-    let app = create_router(state, broadcaster);
+pub async fn start_http_server(observable_state: ObservableState) {
+    let app = create_router(observable_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
         .await
@@ -103,6 +156,7 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
     println!("  POST /auto-tightening/stop        - Stop automated tightening simulation");
     println!("  GET  /auto-tightening/status      - Get auto-tightening status");
     println!("  POST /config/multi-spindle        - Configure multi-spindle mode");
+    println!("  GET  /ws/events                   - WebSocket event stream");
 
     axum::serve(listener, app)
         .await
@@ -111,7 +165,7 @@ pub async fn start_http_server(state: Arc<RwLock<DeviceState>>, broadcaster: Eve
 
 /// Handler for GET /state endpoint
 async fn get_state(AxumState(server_state): AxumState<ServerState>) -> Json<DeviceState> {
-    let state = server_state.device_state.read().unwrap();
+    let state = server_state.observable_state.read();
     Json(state.clone())
 }
 
@@ -147,23 +201,56 @@ struct TighteningResponse {
 /// Simulates a tightening operation and broadcasts to subscribed clients
 async fn simulate_tightening(
     AxumState(server_state): AxumState<ServerState>,
-    Json(payload): Json<TighteningRequest>,
+    Json(_payload): Json<TighteningRequest>,
 ) -> impl IntoResponse {
+    // Get tightening params from selected PSET
+    let params = {
+        let state = server_state.observable_state.read();
+        get_tightening_params(
+            state.current_pset_id,
+            &server_state.pset_repository,
+            500, // duration_ms for simulation
+        )
+    };
+
+    println!(
+        "Simulating tightening with params: Torque {:.1}-{:.1} Nm (target: {:.1}), Angle {:.1}-{:.1}° (target: {:.1})",
+        params.torque_min, params.torque_max, params.target_torque,
+        params.angle_min, params.angle_max, params.target_angle
+    );
+
+    // Run FSM simulation
+    let fsm = DeviceFSM::new();
+    let fsm = fsm.start_tightening(params.clone());
+    tokio::time::sleep(Duration::from_millis(10)).await; // Brief simulation
+    let fsm = fsm.complete();
+    let outcome = fsm.result();
+
+    println!(
+        "Result: Torque={:.2} Nm ({}), Angle={:.1}° ({}), Overall: {}",
+        outcome.actual_torque,
+        if outcome.torque_ok { "OK" } else { "NOK" },
+        outcome.actual_angle,
+        if outcome.angle_ok { "OK" } else { "NOK" },
+        if outcome.ok { "OK" } else { "NOK" }
+    );
+
     let (result, batch_counter, batch_completed) = {
-        let mut state = server_state.device_state.write().unwrap();
+        let mut state = server_state.observable_state.write();
 
         // Add tightening to tracker
-        let info = state.tightening_tracker.add_tightening(payload.ok);
+        let info = state.tightening_tracker.add_tightening(outcome.ok);
 
         // Build tightening result from device state
         let result = build_tightening_result(
             &state,
             &info,
-            payload.torque,
-            payload.angle,
-            payload.ok,
-            payload.ok,
-            payload.ok,
+            outcome.actual_torque,
+            outcome.actual_angle,
+            outcome.ok,
+            outcome.torque_ok,
+            outcome.angle_ok,
+            &params,
         );
 
         let batch_completed = state.tightening_tracker.is_complete();
@@ -175,18 +262,19 @@ async fn simulate_tightening(
 
     // Broadcast the tightening event to all TCP clients
     let event = SimulatorEvent::TighteningCompleted { result };
-    let subscribers = server_state.broadcaster.receiver_count();
-
-    let tightening_result = server_state.broadcaster.send(event);
+    server_state.observable_state.broadcast(event);
 
     // If batch completed, emit batch completion event
     if batch_completed {
         let batch_event = SimulatorEvent::BatchCompleted {
             total: batch_counter,
         };
-        let _ = server_state.broadcaster.send(batch_event);
+        server_state.observable_state.broadcast(batch_event);
         println!("Batch completed with {} tightenings", batch_counter);
     }
+
+    let subscribers = 0; // WebSocket subscribers (not tracked in current API)
+    let tightening_result: Result<(), String> = Ok(());
 
     match tightening_result {
         Ok(_) => {
@@ -277,10 +365,10 @@ async fn start_auto_tightening(
     let duration_ms = payload.duration_ms;
     let failure_rate = payload.failure_rate.clamp(0.0, 1.0);
 
-    // Clone state for background task
-    let state = Arc::clone(&server_state.device_state);
-    let broadcaster = server_state.broadcaster.clone();
+    // Clone observable state for background task
+    let observable_state = server_state.observable_state.clone();
     let auto_active = Arc::clone(&server_state.auto_tightening_active);
+    let pset_repository = Arc::clone(&server_state.pset_repository);
 
     // Set active flag
     auto_active.store(true, Ordering::Relaxed);
@@ -293,7 +381,7 @@ async fn start_auto_tightening(
         while auto_active.load(Ordering::Relaxed) {
             // Check if tool is enabled
             let tool_enabled = {
-                let s = state.read().unwrap();
+                let s = observable_state.read();
                 s.tool_enabled
             };
 
@@ -306,7 +394,7 @@ async fn start_auto_tightening(
             // In batch mode: waits when batch is complete
             // In single mode: never waits (integrator controls via tool enable/disable)
             let (should_wait, remaining) = {
-                let s = state.read().unwrap();
+                let s = observable_state.read();
                 (
                     s.tightening_tracker.should_wait_for_config(),
                     s.tightening_tracker.remaining_work(),
@@ -331,11 +419,15 @@ async fn start_auto_tightening(
             // Phase 1: IDLE → TIGHTENING
             // ================================================================
 
-            let params = TighteningParams::default_test();
+            // Get params from selected PSET
+            let params = {
+                let s = observable_state.read();
+                get_tightening_params(s.current_pset_id, &pset_repository, duration_ms)
+            };
 
             // Update state to reflect tightening in progress
             {
-                let mut s = state.write().unwrap();
+                let mut s = observable_state.write();
                 let fsm = DeviceFSM::new().start_tightening(params.clone());
                 s.device_fsm_state = DeviceFSMState::tightening(&fsm);
             }
@@ -361,7 +453,7 @@ async fn start_auto_tightening(
             // ================================================================
 
             // Complete the tightening and get result
-            let fsm = DeviceFSM::new().start_tightening(params);
+            let fsm = DeviceFSM::new().start_tightening(params.clone());
             let fsm = fsm.complete();
             let outcome = fsm.result();
 
@@ -376,7 +468,7 @@ async fn start_auto_tightening(
 
             // Update state to evaluating
             {
-                let mut s = state.write().unwrap();
+                let mut s = observable_state.write();
                 s.device_fsm_state = DeviceFSMState::evaluating(&fsm);
             }
 
@@ -394,7 +486,7 @@ async fn start_auto_tightening(
 
             // Check if multi-spindle mode is enabled
             let (multi_spindle_enabled, multi_spindle_config) = {
-                let s = state.read().unwrap();
+                let s = observable_state.read();
                 (
                     s.multi_spindle_config.enabled,
                     s.multi_spindle_config.clone(),
@@ -408,7 +500,7 @@ async fn start_auto_tightening(
 
                 // Get result_id and pset_id before generating results
                 let (result_id, pset_id) = {
-                    let s = state.read().unwrap();
+                    let s = observable_state.read();
                     (
                         s.tightening_tracker.tightening_sequence() + 1, // Next sequence number
                         s.current_pset_id.unwrap_or(1),
@@ -425,7 +517,7 @@ async fn start_auto_tightening(
                     multi_spindle_config.sync_id,
                     multi_spindle_config.spindle_count,
                 );
-                let _ = broadcaster.send(SimulatorEvent::MultiSpindleStatusCompleted {
+                observable_state.broadcast(SimulatorEvent::MultiSpindleStatusCompleted {
                     status: running_status,
                 });
 
@@ -448,7 +540,7 @@ async fn start_auto_tightening(
                 let overall_ok = multi_result.is_ok();
 
                 // Broadcast multi-spindle result (MID 0101)
-                let _ = broadcaster.send(SimulatorEvent::MultiSpindleResultCompleted {
+                observable_state.broadcast(SimulatorEvent::MultiSpindleResultCompleted {
                     result: multi_result,
                 });
 
@@ -457,23 +549,28 @@ async fn start_auto_tightening(
                     multi_spindle_config.sync_id,
                     multi_spindle_config.spindle_count,
                 );
-                let _ = broadcaster.send(SimulatorEvent::MultiSpindleStatusCompleted {
+                observable_state.broadcast(SimulatorEvent::MultiSpindleStatusCompleted {
                     status: completed_status,
                 });
 
                 // Update tracker with overall status
-                let (batch_counter, batch_completed) = {
-                    let mut s = state.write().unwrap();
+                let (batch_counter, batch_completed, target_size) = {
+                    let mut s = observable_state.write();
                     let info = s.tightening_tracker.add_tightening(overall_ok);
                     let batch_completed = s.tightening_tracker.is_complete();
-                    (info.counter, batch_completed)
+                    let target = s.tightening_tracker.batch_size();
+                    (info.counter, batch_completed, target)
                 };
+
+                // Broadcast auto-tightening progress
+                let is_running = auto_active.load(Ordering::Relaxed);
+                observable_state.broadcast_auto_progress(batch_counter, target_size, is_running);
 
                 if batch_completed {
                     let batch_event = SimulatorEvent::BatchCompleted {
                         total: batch_counter,
                     };
-                    let _ = broadcaster.send(batch_event);
+                    observable_state.broadcast(batch_event);
                     println!("Batch completed with {} tightenings", batch_counter);
                 }
             } else {
@@ -481,8 +578,8 @@ async fn start_auto_tightening(
                 // SINGLE-SPINDLE PATH
                 // ============================================================
 
-                let (result, batch_counter, batch_completed) = {
-                    let mut s = state.write().unwrap();
+                let (result, batch_counter, batch_completed, target_size) = {
+                    let mut s = observable_state.write();
                     let info = s.tightening_tracker.add_tightening(final_ok);
 
                     let result = build_tightening_result(
@@ -493,24 +590,30 @@ async fn start_auto_tightening(
                         final_ok,
                         outcome.torque_ok,
                         outcome.angle_ok,
+                        &params,
                     );
 
                     let batch_completed = s.tightening_tracker.is_complete();
+                    let target = s.tightening_tracker.batch_size();
 
                     // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
 
-                    (result, info.counter, batch_completed)
+                    (result, info.counter, batch_completed, target)
                 };
 
                 // Broadcast to subscribed TCP clients
                 let event = SimulatorEvent::TighteningCompleted { result };
-                let _ = broadcaster.send(event);
+                observable_state.broadcast(event);
+
+                // Broadcast auto-tightening progress
+                let is_running = auto_active.load(Ordering::Relaxed);
+                observable_state.broadcast_auto_progress(batch_counter, target_size, is_running);
 
                 if batch_completed {
                     let batch_event = SimulatorEvent::BatchCompleted {
                         total: batch_counter,
                     };
-                    let _ = broadcaster.send(batch_event);
+                    observable_state.broadcast(batch_event);
                     println!("Batch completed with {} tightenings", batch_counter);
                 }
             }
@@ -520,7 +623,7 @@ async fn start_auto_tightening(
             // ================================================================
 
             {
-                let mut s = state.write().unwrap();
+                let mut s = observable_state.write();
                 s.device_fsm_state = DeviceFSMState::idle();
             }
 
@@ -554,6 +657,16 @@ async fn stop_auto_tightening(
         .swap(false, Ordering::Relaxed);
 
     if was_running {
+        // Broadcast the stopped status
+        let (counter, target_size) = {
+            let state = server_state.observable_state.read();
+            let counter = state.tightening_tracker.counter();
+            let target = state.tightening_tracker.batch_size();
+            (counter, target)
+        };
+
+        server_state.observable_state.broadcast_auto_progress(counter, target_size, false);
+
         (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -587,7 +700,7 @@ async fn get_auto_tightening_status(
     AxumState(server_state): AxumState<ServerState>,
 ) -> Json<AutoTighteningStatus> {
     let running = server_state.auto_tightening_active.load(Ordering::Relaxed);
-    let state = server_state.device_state.read().unwrap();
+    let state = server_state.observable_state.read();
     let counter = state.tightening_tracker.counter();
     let target = state.tightening_tracker.batch_size();
 
@@ -637,11 +750,12 @@ async fn configure_multi_spindle(
     AxumState(server_state): AxumState<ServerState>,
     Json(payload): Json<MultiSpindleConfigRequest>,
 ) -> impl IntoResponse {
-    let mut state = server_state.device_state.write().unwrap();
-
     if payload.enabled {
         // Enable multi-spindle mode
-        match state.enable_multi_spindle(payload.spindle_count, payload.sync_id) {
+        match server_state
+            .observable_state
+            .enable_multi_spindle(payload.spindle_count, payload.sync_id)
+        {
             Ok(_) => {
                 println!(
                     "Multi-spindle mode enabled: {} spindles, sync_id={}",
@@ -677,7 +791,7 @@ async fn configure_multi_spindle(
         }
     } else {
         // Disable multi-spindle mode
-        state.disable_multi_spindle();
+        server_state.observable_state.disable_multi_spindle();
         println!("Multi-spindle mode disabled");
         (
             StatusCode::OK,
@@ -689,5 +803,269 @@ async fn configure_multi_spindle(
                 sync_id: 0,
             }),
         )
+    }
+}
+
+// ============================================================================
+// WebSocket Event Stream
+// ============================================================================
+
+/// Handler for GET /ws/events endpoint
+/// Upgrades the HTTP connection to WebSocket and streams events to the client
+async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    AxumState(server_state): AxumState<ServerState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_websocket(socket, server_state))
+}
+
+/// WebSocket connection handler
+/// Subscribes to the event broadcaster and sends all events to the WebSocket client
+async fn handle_websocket(socket: WebSocket, server_state: ServerState) {
+    let (mut sender, mut receiver) = socket.split();
+
+    // Subscribe to the event broadcaster
+    let mut event_rx = server_state.observable_state.subscribe();
+
+    println!("WebSocket client connected");
+
+    // Send initial device state
+    let state_json = {
+        let state = server_state.observable_state.read();
+        serde_json::to_string(&*state).ok()
+    };
+
+    if let Some(json) = state_json {
+        let _ = sender.send(Message::Text(json.into())).await;
+    }
+
+    // Spawn task to receive messages from client (ping/pong)
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            // Handle ping/pong and close messages
+            if matches!(msg, Message::Close(_)) {
+                break;
+            }
+        }
+    });
+
+    // Main task: forward events from broadcaster to WebSocket
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(event) = event_rx.recv().await {
+            // Serialize event to JSON
+            let json = match serde_json::to_string(&event) {
+                Ok(j) => j,
+                Err(e) => {
+                    eprintln!("Failed to serialize event: {}", e);
+                    continue;
+                }
+            };
+
+            // Send to WebSocket client
+            if sender.send(Message::Text(json.into())).await.is_err() {
+                // Client disconnected
+                break;
+            }
+        }
+    });
+
+    // Wait for either task to finish
+    tokio::select! {
+        _ = &mut send_task => {
+            recv_task.abort();
+        },
+        _ = &mut recv_task => {
+            send_task.abort();
+        }
+    }
+
+    println!("WebSocket client disconnected");
+}
+
+/// Handler for GET /psets endpoint
+/// Returns all available PSETs
+async fn get_psets(
+    AxumState(server_state): AxumState<ServerState>,
+) -> impl IntoResponse {
+    let repo = server_state.pset_repository.read().unwrap();
+    let psets = repo.get_all();
+    Json(psets)
+}
+
+/// Handler for GET /psets/:id endpoint
+/// Returns a specific PSET by ID
+async fn get_pset_by_id(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    let repo = server_state.pset_repository.read().unwrap();
+    match repo.get_by_id(id) {
+        Some(pset) => (StatusCode::OK, Json(pset)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("PSET with id {} not found", id)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Handler for POST /psets/:id/select endpoint
+/// Selects the specified PSET as the active parameter set
+async fn select_pset(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    // Check if PSET exists
+    let pset_name = {
+        let repo = server_state.pset_repository.read().unwrap();
+        match repo.get_by_id(id) {
+            Some(pset) => pset.name.clone(),
+            None => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "success": false,
+                        "error": format!("PSET with id {} not found", id)
+                    })),
+                )
+                    .into_response()
+            }
+        }
+    };
+
+    // Set the PSET in device state and broadcast the change
+    server_state
+        .observable_state
+        .set_pset(id, Some(pset_name.clone()));
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": format!("PSET {} '{}' selected", id, pset_name),
+            "pset_id": id,
+            "pset_name": pset_name
+        })),
+    )
+        .into_response()
+}
+
+/// Handler for POST /psets endpoint
+/// Creates a new PSET
+async fn create_pset(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(pset): Json<pset::Pset>,
+) -> impl IntoResponse {
+    let mut repo = server_state.pset_repository.write().unwrap();
+
+    match repo.create(pset) {
+        Ok(created_pset) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "PSET created successfully",
+                "pset": created_pset
+            })),
+        )
+            .into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "error": err
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Handler for PUT /psets/:id endpoint
+/// Updates an existing PSET
+async fn update_pset(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+    Json(pset): Json<pset::Pset>,
+) -> impl IntoResponse {
+    let mut repo = server_state.pset_repository.write().unwrap();
+
+    match repo.update(id, pset) {
+        Ok(updated_pset) => {
+            // If this is the currently selected PSET, update the state
+            let current_pset_id = server_state.observable_state.read().current_pset_id;
+            if current_pset_id == Some(id) {
+                server_state
+                    .observable_state
+                    .set_pset(id, Some(updated_pset.name.clone()));
+            }
+
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": "PSET updated successfully",
+                    "pset": updated_pset
+                })),
+            )
+                .into_response()
+        }
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "error": err
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Handler for DELETE /psets/:id endpoint
+/// Deletes a PSET
+async fn delete_pset(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    // Check if this PSET is currently selected
+    let current_pset_id = server_state.observable_state.read().current_pset_id;
+    if current_pset_id == Some(id) {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Cannot delete currently selected PSET. Please select another PSET first."
+            })),
+        )
+            .into_response();
+    }
+
+    let mut repo = server_state.pset_repository.write().unwrap();
+
+    match repo.delete(id) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "PSET deleted successfully"
+            })),
+        )
+            .into_response(),
+        Err(err) => {
+            let status = if err.contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+
+            (
+                status,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": err
+                })),
+            )
+                .into_response()
+        }
     }
 }

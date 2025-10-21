@@ -1,17 +1,16 @@
 use crate::handler::data::command_accepted::CommandAccepted;
 use crate::handler::{HandlerError, MidHandler};
+use crate::observable_state::ObservableState;
 use crate::protocol::{Message, Response};
-use crate::state::DeviceState;
-use std::sync::{Arc, RwLock};
 
 /// MID 0050 - Vehicle ID Number download
 /// Receives vehicle identification from integrator and responds with acknowledgment
 pub struct VehicleIdDownloadHandler {
-    state: Arc<RwLock<DeviceState>>,
+    state: ObservableState,
 }
 
 impl VehicleIdDownloadHandler {
-    pub fn new(state: Arc<RwLock<DeviceState>>) -> Self {
+    pub fn new(state: ObservableState) -> Self {
         Self { state }
     }
 }
@@ -27,11 +26,8 @@ impl MidHandler for VehicleIdDownloadHandler {
 
         println!("MID 0050: Vehicle ID download - VIN: {}", vin);
 
-        // Update device state
-        {
-            let mut state = self.state.write().unwrap();
-            state.set_vehicle_id(vin);
-        }
+        // Update device state and broadcast event
+        self.state.set_vehicle_id(vin);
 
         let ack_data = CommandAccepted::with_mid(50);
 

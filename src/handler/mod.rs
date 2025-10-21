@@ -22,10 +22,10 @@ pub mod vehicle_id_download;
 pub mod vehicle_id_subscription;
 pub mod vehicle_id_unsubscribe;
 
+use crate::observable_state::ObservableState;
 use crate::protocol::{Message, Response};
-use crate::state::DeviceState;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -79,14 +79,15 @@ impl Default for HandlerRegistry {
 }
 
 /// Create a registry with all standard handlers registered
-pub fn create_default_registry(state: Arc<RwLock<DeviceState>>) -> HandlerRegistry {
+pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegistry {
     let mut registry = HandlerRegistry::new();
+    let state = observable_state.state();
 
     // Register all MID handlers (sorted by MID number)
     registry.register(
         1,
         Box::new(communication_start::CommunicationStartHandler::new(
-            Arc::clone(&state),
+            Arc::clone(state),
         )),
     );
     registry.register(
@@ -97,24 +98,26 @@ pub fn create_default_registry(state: Arc<RwLock<DeviceState>>) -> HandlerRegist
     registry.register(17, Box::new(pset_unsubscribe::PsetUnsubscribeHandler));
     registry.register(
         18,
-        Box::new(pset_select::PsetSelectHandler::new(Arc::clone(&state))),
+        Box::new(pset_select::PsetSelectHandler::new(observable_state.clone())),
     );
     registry.register(
         19,
-        Box::new(batch_size::BatchSizeHandler::new(Arc::clone(&state))),
+        Box::new(batch_size::BatchSizeHandler::new(Arc::clone(state))),
     );
     registry.register(
         42,
-        Box::new(tool_disable::ToolDisableHandler::new(Arc::clone(&state))),
+        Box::new(tool_disable::ToolDisableHandler::new(
+            observable_state.clone(),
+        )),
     );
     registry.register(
         43,
-        Box::new(tool_enable::ToolEnableHandler::new(Arc::clone(&state))),
+        Box::new(tool_enable::ToolEnableHandler::new(observable_state.clone())),
     );
     registry.register(
         50,
         Box::new(vehicle_id_download::VehicleIdDownloadHandler::new(
-            Arc::clone(&state),
+            observable_state.clone(),
         )),
     );
     registry.register(

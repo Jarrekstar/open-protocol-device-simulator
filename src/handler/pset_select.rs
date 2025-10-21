@@ -4,18 +4,17 @@
 //! Each pset defines torque/angle limits and tightening strategy.
 
 use crate::handler::{HandlerError, MidHandler};
+use crate::observable_state::ObservableState;
 use crate::protocol::{Message, Response};
-use crate::state::DeviceState;
-use std::sync::{Arc, RwLock};
 
 /// MID 0018 - Parameter set selection
 /// Selects a specific parameter set (pset) for tightening operations
 pub struct PsetSelectHandler {
-    state: Arc<RwLock<DeviceState>>,
+    state: ObservableState,
 }
 
 impl PsetSelectHandler {
-    pub fn new(state: Arc<RwLock<DeviceState>>) -> Self {
+    pub fn new(state: ObservableState) -> Self {
         Self { state }
     }
 }
@@ -34,11 +33,9 @@ impl MidHandler for PsetSelectHandler {
 
         println!("MID 0018: Parameter set select - Pset ID: {}", pset_id);
 
-        // Update device state
-        {
-            let mut state = self.state.write().unwrap();
-            state.set_pset(pset_id, Some(format!("Pset_{}", pset_id)));
-        }
+        // Update device state and broadcast event
+        self.state
+            .set_pset(pset_id, Some(format!("Pset_{}", pset_id)));
 
         // Respond with MID 0016 (Command accepted)
         Ok(Response::new(16, message.revision, Vec::new()))

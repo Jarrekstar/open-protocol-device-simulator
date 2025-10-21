@@ -1,10 +1,11 @@
 use crate::protocol::field::FieldBuilder;
 use crate::protocol::response_data::ResponseData;
+use serde::{Deserialize, Serialize};
 
 /// MID 0061 - Last tightening result data
 ///
 /// Contains detailed information about a completed tightening operation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TighteningResult {
     /// Cell ID (Parameter 01)
     pub cell_id: u32,
@@ -161,7 +162,7 @@ mod tests {
     #[test]
     fn test_tightening_result_serialization() {
         let result = TighteningResult::example();
-        let data = result.serialize();
+        let data = ResponseData::serialize(&result);
 
         // Should contain multiple parameters
         assert!(!data.is_empty());
