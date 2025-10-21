@@ -148,15 +148,19 @@ pub async fn start_http_server(observable_state: ObservableState) {
 
     println!("HTTP state server listening on http://0.0.0.0:8081");
     println!("Endpoints:");
-    println!("  GET  /state                       - View device state");
-    println!("  POST /simulate/tightening         - Simulate a single tightening operation");
-    println!(
-        "  POST /auto-tightening/start       - Start automated tightening simulation (continuous)"
-    );
-    println!("  POST /auto-tightening/stop        - Stop automated tightening simulation");
-    println!("  GET  /auto-tightening/status      - Get auto-tightening status");
-    println!("  POST /config/multi-spindle        - Configure multi-spindle mode");
-    println!("  GET  /ws/events                   - WebSocket event stream");
+    println!("  GET    /state                     - View device state");
+    println!("  POST   /simulate/tightening       - Simulate a single tightening operation");
+    println!("  POST   /auto-tightening/start     - Start automated tightening simulation (continuous)");
+    println!("  POST   /auto-tightening/stop      - Stop automated tightening simulation");
+    println!("  GET    /auto-tightening/status    - Get auto-tightening status");
+    println!("  POST   /config/multi-spindle      - Configure multi-spindle mode");
+    println!("  GET    /psets                     - Get all PSETs");
+    println!("  POST   /psets                     - Create a new PSET");
+    println!("  GET    /psets/{{id}}                - Get a specific PSET by ID");
+    println!("  PUT    /psets/{{id}}                - Update a PSET");
+    println!("  DELETE /psets/{{id}}                - Delete a PSET");
+    println!("  POST   /psets/{{id}}/select         - Select a PSET as active");
+    println!("  GET    /ws/events                 - WebSocket event stream");
 
     axum::serve(listener, app)
         .await
@@ -171,22 +175,12 @@ async fn get_state(AxumState(server_state): AxumState<ServerState>) -> Json<Devi
 
 #[derive(Deserialize)]
 struct TighteningRequest {
-    #[serde(default = "default_torque")]
-    torque: f64,
-    #[serde(default = "default_angle")]
-    angle: f64,
-    #[serde(default = "default_status")]
-    ok: bool,
-}
-
-fn default_torque() -> f64 {
-    12.5
-}
-fn default_angle() -> f64 {
-    40.0
-}
-fn default_status() -> bool {
-    true
+    /// Optional torque override (if provided, used as exact target with min=max)
+    torque: Option<f64>,
+    /// Optional angle override (if provided, used as exact target with min=max)
+    angle: Option<f64>,
+    /// Optional OK/NOK override (None = FSM decides, Some(true) = Force OK, Some(false) = Force NOK)
+    ok: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -201,16 +195,32 @@ struct TighteningResponse {
 /// Simulates a tightening operation and broadcasts to subscribed clients
 async fn simulate_tightening(
     AxumState(server_state): AxumState<ServerState>,
-    Json(_payload): Json<TighteningRequest>,
+    Json(payload): Json<TighteningRequest>,
 ) -> impl IntoResponse {
-    // Get tightening params from selected PSET
-    let params = {
-        let state = server_state.observable_state.read();
-        get_tightening_params(
-            state.current_pset_id,
-            &server_state.pset_repository,
-            500, // duration_ms for simulation
-        )
+    // Determine tightening params: use overrides if provided, otherwise use PSET
+    let params = match (payload.torque, payload.angle) {
+        (Some(torque), Some(angle)) => {
+            // Manual override: use exact values (min=max)
+            println!("Manual tightening override: Torque={:.1} Nm, Angle={:.1}°", torque, angle);
+            TighteningParams {
+                target_torque: torque,
+                torque_min: torque,
+                torque_max: torque,
+                target_angle: angle,
+                angle_min: angle,
+                angle_max: angle,
+                duration_ms: 500,
+            }
+        }
+        _ => {
+            // Use PSET values
+            let state = server_state.observable_state.read();
+            get_tightening_params(
+                state.current_pset_id,
+                &server_state.pset_repository,
+                500, // duration_ms for simulation
+            )
+        }
     };
 
     println!(
@@ -224,32 +234,44 @@ async fn simulate_tightening(
     let fsm = fsm.start_tightening(params.clone());
     tokio::time::sleep(Duration::from_millis(10)).await; // Brief simulation
     let fsm = fsm.complete();
-    let outcome = fsm.result();
+    let fsm_outcome = fsm.result();
+
+    // Apply manual OK/NOK override if provided, otherwise use FSM result
+    let final_ok = if let Some(force_ok) = payload.ok {
+        println!(
+            "Forcing result: {} (FSM determined: {})",
+            if force_ok { "OK" } else { "NOK" },
+            if fsm_outcome.ok { "OK" } else { "NOK" }
+        );
+        force_ok
+    } else {
+        fsm_outcome.ok
+    };
 
     println!(
         "Result: Torque={:.2} Nm ({}), Angle={:.1}° ({}), Overall: {}",
-        outcome.actual_torque,
-        if outcome.torque_ok { "OK" } else { "NOK" },
-        outcome.actual_angle,
-        if outcome.angle_ok { "OK" } else { "NOK" },
-        if outcome.ok { "OK" } else { "NOK" }
+        fsm_outcome.actual_torque,
+        if fsm_outcome.torque_ok { "OK" } else { "NOK" },
+        fsm_outcome.actual_angle,
+        if fsm_outcome.angle_ok { "OK" } else { "NOK" },
+        if final_ok { "OK" } else { "NOK" }
     );
 
     let (result, batch_counter, batch_completed) = {
         let mut state = server_state.observable_state.write();
 
         // Add tightening to tracker
-        let info = state.tightening_tracker.add_tightening(outcome.ok);
+        let info = state.tightening_tracker.add_tightening(final_ok);
 
         // Build tightening result from device state
         let result = build_tightening_result(
             &state,
             &info,
-            outcome.actual_torque,
-            outcome.actual_angle,
-            outcome.ok,
-            outcome.torque_ok,
-            outcome.angle_ok,
+            fsm_outcome.actual_torque,
+            fsm_outcome.actual_angle,
+            final_ok,
+            fsm_outcome.torque_ok,
+            fsm_outcome.angle_ok,
             &params,
         );
 

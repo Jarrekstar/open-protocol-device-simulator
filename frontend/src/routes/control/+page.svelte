@@ -17,13 +17,29 @@
 		sync_id: 1
 	};
 
+	let usePsetValues = true; // Default to using PSET
+	let resultMode: 'auto' | 'ok' | 'nok' = 'auto'; // 3-way result choice
+
 	let tighteningPayload = {
 		torque: 12.5,
-		angle: 40.0,
-		ok: true
+		angle: 40.0
 	};
 
 	let psets: Pset[] = [];
+
+	// Compute current PSET target values for display
+	$: currentPsetTargets = $deviceState?.current_pset_id
+		? (() => {
+				const pset = psets.find((p) => p.id === $deviceState?.current_pset_id);
+				if (pset) {
+					return {
+						torque: ((pset.torque_min + pset.torque_max) / 2).toFixed(1),
+						angle: ((pset.angle_min + pset.angle_max) / 2).toFixed(1)
+					};
+				}
+				return null;
+		  })()
+		: null;
 
 	async function loadPsets() {
 		try {
@@ -44,7 +60,21 @@
 
 	async function handleSimulateTightening() {
 		try {
-			await api.simulateTightening(tighteningPayload);
+			let payload: any = {};
+
+			if (!usePsetValues) {
+				// Manual override mode - send torque and angle
+				payload.torque = tighteningPayload.torque;
+				payload.angle = tighteningPayload.angle;
+
+				// Add OK/NOK override if not auto
+				if (resultMode !== 'auto') {
+					payload.ok = resultMode === 'ok';
+				}
+			}
+			// If usePsetValues is true, send empty object (use PSET)
+
+			await api.simulateTightening(payload);
 			showToast({ type: 'success', message: 'Tightening simulated!' });
 		} catch (error) {
 			showToast({ type: 'error', message: `Failed: ${error}` });
@@ -156,32 +186,62 @@
 	<div class="card p-4">
 		<h2 class="h2 mb-4">Simulate Tightening</h2>
 		<form on:submit|preventDefault={handleSimulateTightening} class="space-y-4">
-			<label class="label">
-				<span>Torque (Nm)</span>
-				<input
-					type="number"
-					class="input"
-					bind:value={tighteningPayload.torque}
-					step="0.1"
-					min="0"
-					max="100"
-				/>
-			</label>
-			<label class="label">
-				<span>Angle (degrees)</span>
-				<input
-					type="number"
-					class="input"
-					bind:value={tighteningPayload.angle}
-					step="0.1"
-					min="0"
-					max="360"
-				/>
-			</label>
+			<!-- Use PSET checkbox -->
 			<label class="flex items-center space-x-2">
-				<input type="checkbox" class="checkbox" bind:checked={tighteningPayload.ok} />
-				<span>OK (successful tightening)</span>
+				<input type="checkbox" class="checkbox" bind:checked={usePsetValues} />
+				<span class="font-semibold">Use PSET values</span>
 			</label>
+
+			{#if usePsetValues}
+				<!-- Show PSET values (read-only) -->
+				<div class="p-3 bg-surface-100-800-token rounded">
+					{#if currentPsetTargets}
+						<p class="text-sm">
+							<span class="font-semibold">PSET Target:</span>
+						</p>
+						<p class="text-sm mt-1">Torque: {currentPsetTargets.torque} Nm</p>
+						<p class="text-sm">Angle: {currentPsetTargets.angle}°</p>
+						<p class="text-sm mt-2 text-surface-500">Result determined by FSM</p>
+					{:else}
+						<p class="text-sm text-surface-500">No PSET selected</p>
+					{/if}
+				</div>
+			{:else}
+				<!-- Manual override fields -->
+				<label class="label">
+					<span>Torque (Nm)</span>
+					<input
+						type="number"
+						class="input"
+						bind:value={tighteningPayload.torque}
+						step="0.1"
+						min="0"
+						max="100"
+					/>
+				</label>
+				<label class="label">
+					<span>Angle (degrees)</span>
+					<input
+						type="number"
+						class="input"
+						bind:value={tighteningPayload.angle}
+						step="0.1"
+						min="0"
+						max="360"
+					/>
+				</label>
+
+				<!-- Result Mode Selector -->
+				<label class="label">
+					<span>Result Mode</span>
+					<select class="select" bind:value={resultMode}>
+						<option value="auto">Auto (FSM determines)</option>
+						<option value="ok">Force OK</option>
+						<option value="nok">Force NOK</option>
+					</select>
+				</label>
+			{/if}
+
 			<button type="submit" class="btn variant-filled-primary w-full">
 				Simulate Tightening
 			</button>
