@@ -1,13 +1,15 @@
 mod common;
 
-use open_protocol_device_simulator::{DeviceState, handler, protocol};
+use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, handler, protocol};
 use std::sync::{Arc, RwLock};
 
 /// Test MID 0001 - Communication Start
 #[test]
 fn test_communication_start() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     let message = protocol::Message {
         length: 20,
@@ -26,7 +28,9 @@ fn test_communication_start() {
 #[test]
 fn test_communication_stop() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     let message = protocol::Message {
         length: 20,
@@ -48,7 +52,9 @@ fn test_communication_stop() {
 #[test]
 fn test_keep_alive() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     let message = protocol::Message {
         length: 20,
@@ -67,7 +73,9 @@ fn test_keep_alive() {
 #[test]
 fn test_pset_selection() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Select parameter set 5
     let data = b"005".to_vec();
@@ -95,7 +103,9 @@ fn test_pset_selection() {
 #[test]
 fn test_batch_size() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Set batch size to 10 for parameter set 1
     let data = b"0010010".to_vec();
@@ -123,7 +133,9 @@ fn test_batch_size() {
 #[test]
 fn test_tool_disable() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     let message = protocol::Message {
         length: 20,
@@ -155,7 +167,9 @@ fn test_tool_enable() {
         device_state.tool_enabled = false;
     }
 
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     let message = protocol::Message {
         length: 20,
@@ -181,7 +195,9 @@ fn test_tool_enable() {
 #[test]
 fn test_vehicle_id_download() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Download VIN
     let vin = "SSC044207                ";
@@ -213,7 +229,9 @@ fn test_vehicle_id_download() {
 #[test]
 fn test_tightening_result_subscription() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Subscribe (MID 0060)
     let message = protocol::Message {
@@ -244,7 +262,9 @@ fn test_tightening_result_subscription() {
 #[test]
 fn test_pset_subscription() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Subscribe (MID 0014)
     let message = protocol::Message {
@@ -275,7 +295,9 @@ fn test_pset_subscription() {
 #[test]
 fn test_vehicle_id_subscription() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Subscribe (MID 0051)
     let message = protocol::Message {
@@ -306,7 +328,9 @@ fn test_vehicle_id_subscription() {
 #[test]
 fn test_multi_spindle_status_subscription() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Subscribe (MID 0090)
     let message = protocol::Message {
@@ -337,7 +361,9 @@ fn test_multi_spindle_status_subscription() {
 #[test]
 fn test_multi_spindle_result_subscription() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Subscribe (MID 0100)
     let message = protocol::Message {
@@ -368,7 +394,9 @@ fn test_multi_spindle_result_subscription() {
 #[test]
 fn test_unknown_mid() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     let message = protocol::Message {
         length: 20,
@@ -385,7 +413,9 @@ fn test_unknown_mid() {
 #[test]
 fn test_batch_lifecycle() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
-    let registry = handler::create_default_registry(Arc::clone(&state));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
 
     // Set batch size to 3
     let data = b"0010003".to_vec();

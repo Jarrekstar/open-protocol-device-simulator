@@ -1,0 +1,31 @@
+{
+  "name": "device-simulator-ui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@skeletonlabs/skeleton": "^2.10.2",
+    "@skeletonlabs/tw-plugin": "^0.4.0",
+    "@sveltejs/adapter-auto": "^3.2.5",
+    "@sveltejs/kit": "^2.11.1",
+    "@sveltejs/vite-plugin-svelte": "^4.0.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "svelte": "^5.2.9",
+    "svelte-check": "^4.0.9",
+    "tailwindcss": "^3.4.16",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  },
+  "type": "module",
+  "dependencies": {
+    "date-fns": "^4.1.0"
+  }
+}

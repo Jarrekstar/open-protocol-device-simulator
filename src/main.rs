@@ -1,10 +1,13 @@
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
-use open_protocol_device_simulator::{codec, events, handler, http_server, protocol, session, state};
+use open_protocol_device_simulator::{
+    codec, events, handler, http_server, observable_state, protocol, session, state,
+};
 use std::sync::Arc;
 use thiserror::Error;
 
 use events::SimulatorEvent;
+use observable_state::ObservableState;
 use state::DeviceState;
 
 #[tokio::main]
@@ -21,15 +24,17 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
     // Create event broadcast channel (capacity of 100 events)
     let (event_tx, _event_rx) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
 
+    // Create observable state wrapper that broadcasts events on state changes
+    let observable_state = ObservableState::new(device_state, event_tx.clone());
+
     // Spawn HTTP server for state inspection and event generation
-    let http_state = Arc::clone(&device_state);
-    let http_broadcaster = event_tx.clone();
+    let http_observable = observable_state.clone();
     tokio::spawn(async move {
-        http_server::start_http_server(http_state, http_broadcaster).await;
+        http_server::start_http_server(http_observable).await;
     });
 
     // Create handler registry (shared across all connections)
-    let registry = Arc::new(handler::create_default_registry(device_state));
+    let registry = Arc::new(handler::create_default_registry(observable_state));
 
     loop {
         let (stream, addr) = listener.accept().await?;
@@ -149,7 +154,7 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                     }
                                 }
                             }
-                            SimulatorEvent::PsetChanged { pset_id } => {
+                            SimulatorEvent::PsetChanged { pset_id, pset_name: _ } => {
                                 if session.subscriptions().is_subscribed_to_pset_selection() {
                                     println!("Broadcasting MID 0015 to subscribed client ({}): pset {}", session.addr(), pset_id);
                                     let pset_data = handler::data::PsetSelected::new(pset_id);
@@ -221,6 +226,10 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                         break;
                                     }
                                 }
+                            }
+                            SimulatorEvent::AutoTighteningProgress { .. } => {
+                                // Auto-tightening progress is only sent to WebSocket clients, not TCP
+                                // No MID exists in Open Protocol for auto-tightening progress
                             }
                         }
                     }

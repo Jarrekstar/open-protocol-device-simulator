@@ -50,7 +50,7 @@ impl MultiSpindleConfig {
 }
 
 /// Individual spindle result within a multi-spindle operation
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpindleResult {
     /// Spindle number (1-based indexing)
     pub spindle_id: u8,
@@ -118,7 +118,7 @@ impl SpindleResult {
 
 /// Aggregated multi-spindle tightening result
 /// Used for MID 0101 broadcasts and batch tracking
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiSpindleResult {
     /// Unique identifier for this multi-spindle operation
     pub result_id: u32,
@@ -192,7 +192,7 @@ impl MultiSpindleResult {
 
 /// Lightweight multi-spindle status information
 /// Used for MID 0091 status broadcasts
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiSpindleStatus {
     /// Sync tightening ID
     pub sync_id: u32,
