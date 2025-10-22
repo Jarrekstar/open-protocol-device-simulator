@@ -1,5 +1,6 @@
 use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
 use crate::events::SimulatorEvent;
+use crate::failure_simulator::FailureConfig;
 use crate::handler::data::TighteningResult;
 use crate::multi_spindle::{MultiSpindleStatus, generate_multi_spindle_results};
 use crate::observable_state::ObservableState;
@@ -130,6 +131,7 @@ pub fn create_router(observable_state: ObservableState) -> Router {
         .route("/auto-tightening/stop", post(stop_auto_tightening))
         .route("/auto-tightening/status", get(get_auto_tightening_status))
         .route("/config/multi-spindle", post(configure_multi_spindle))
+        .route("/config/failure", get(get_failure_config).post(update_failure_config))
         .route("/psets", get(get_psets).post(create_pset))
         .route("/psets/{id}", get(get_pset_by_id).put(update_pset).delete(delete_pset))
         .route("/psets/{id}/select", post(select_pset))
@@ -154,6 +156,8 @@ pub async fn start_http_server(observable_state: ObservableState) {
     println!("  POST   /auto-tightening/stop      - Stop automated tightening simulation");
     println!("  GET    /auto-tightening/status    - Get auto-tightening status");
     println!("  POST   /config/multi-spindle      - Configure multi-spindle mode");
+    println!("  GET    /config/failure            - Get failure injection configuration");
+    println!("  POST   /config/failure            - Update failure injection configuration");
     println!("  GET    /psets                     - Get all PSETs");
     println!("  POST   /psets                     - Create a new PSET");
     println!("  GET    /psets/{{id}}                - Get a specific PSET by ID");
@@ -826,6 +830,113 @@ async fn configure_multi_spindle(
             }),
         )
     }
+}
+
+// ============================================================================
+// Failure Injection Configuration
+// ============================================================================
+
+#[derive(Deserialize)]
+struct FailureConfigRequest {
+    /// Optional: set connection health directly (0-100)
+    /// If provided, this recalculates all other failure rates
+    connection_health: Option<u8>,
+
+    /// Optional: full manual configuration
+    /// If connection_health is not provided, these values are used directly
+    enabled: Option<bool>,
+    packet_loss_rate: Option<f64>,
+    delay_min_ms: Option<u64>,
+    delay_max_ms: Option<u64>,
+    corruption_rate: Option<f64>,
+    force_disconnect_rate: Option<f64>,
+}
+
+/// Handler for GET /config/failure endpoint
+/// Returns the current failure injection configuration
+async fn get_failure_config(
+    AxumState(server_state): AxumState<ServerState>,
+) -> Json<FailureConfig> {
+    let state = server_state.observable_state.read();
+    Json(state.failure_config.clone())
+}
+
+/// Handler for POST /config/failure endpoint
+/// Updates the failure injection configuration
+async fn update_failure_config(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(payload): Json<FailureConfigRequest>,
+) -> impl IntoResponse {
+    let new_config = if let Some(health) = payload.connection_health {
+        // Simple mode: use connection health slider
+        let health_clamped = health.min(100);
+        println!("Updating failure config via connection health: {}%", health_clamped);
+        FailureConfig::from_health(health_clamped)
+    } else {
+        // Advanced mode: update individual fields
+        let mut config = {
+            let state = server_state.observable_state.read();
+            state.failure_config.clone()
+        };
+
+        if let Some(enabled) = payload.enabled {
+            config.enabled = enabled;
+        }
+        if let Some(rate) = payload.packet_loss_rate {
+            config.packet_loss_rate = rate.clamp(0.0, 1.0);
+        }
+        if let Some(min) = payload.delay_min_ms {
+            config.delay_min_ms = min;
+        }
+        if let Some(max) = payload.delay_max_ms {
+            config.delay_max_ms = max;
+        }
+        if let Some(rate) = payload.corruption_rate {
+            config.corruption_rate = rate.clamp(0.0, 1.0);
+        }
+        if let Some(rate) = payload.force_disconnect_rate {
+            config.force_disconnect_rate = rate.clamp(0.0, 1.0);
+        }
+
+        println!("Updating failure config via individual fields");
+        config
+    };
+
+    // Validate the configuration
+    if !new_config.is_valid() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Invalid failure configuration: check that all values are within valid ranges"
+            })),
+        )
+            .into_response();
+    }
+
+    // Update the state
+    {
+        let mut state = server_state.observable_state.write();
+        state.failure_config = new_config.clone();
+    }
+
+    println!("Failure injection config updated:");
+    println!("  Enabled: {}", new_config.enabled);
+    println!("  Connection Health: {}%", new_config.connection_health);
+    println!("  Packet Loss: {:.1}%", new_config.packet_loss_rate * 100.0);
+    println!("  Delay: {}-{} ms", new_config.delay_min_ms, new_config.delay_max_ms);
+    println!("  Corruption: {:.1}%", new_config.corruption_rate * 100.0);
+    println!("  Disconnect: {:.1}%", new_config.force_disconnect_rate * 100.0);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "Failure injection configuration updated",
+            "config": new_config
+        })),
+    )
+        .into_response()
 }
 
 // ============================================================================

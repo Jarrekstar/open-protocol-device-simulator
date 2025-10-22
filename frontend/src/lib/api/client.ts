@@ -3,6 +3,8 @@ import type {
 	AutoTighteningRequest,
 	MultiSpindleConfigRequest,
 	TighteningRequest,
+	FailureConfig,
+	FailureConfigRequest,
 	Pset
 } from '$lib/types';
 
@@ -61,6 +63,19 @@ export class ApiClient {
 	// POST /config/multi-spindle
 	async configureMultiSpindle(config: MultiSpindleConfigRequest) {
 		return this.request('/config/multi-spindle', {
+			method: 'POST',
+			body: JSON.stringify(config)
+		});
+	}
+
+	// GET /config/failure
+	async getFailureConfig() {
+		return this.request<FailureConfig>('/config/failure');
+	}
+
+	// POST /config/failure
+	async updateFailureConfig(config: FailureConfigRequest) {
+		return this.request<{ success: boolean; message: string; config: FailureConfig }>('/config/failure', {
 			method: 'POST',
 			body: JSON.stringify(config)
 		});

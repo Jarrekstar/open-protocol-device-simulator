@@ -1,14 +1,89 @@
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use open_protocol_device_simulator::{
-    codec, events, handler, http_server, observable_state, protocol, session, state,
+    codec, events, failure_simulator, handler, http_server, observable_state, protocol, session,
+    state,
 };
 use std::sync::Arc;
 use thiserror::Error;
 
 use events::SimulatorEvent;
+use failure_simulator::FailureSimulator;
 use observable_state::ObservableState;
 use state::DeviceState;
+
+/// Send a message with failure injection
+/// Returns Ok(true) if message was sent, Ok(false) if dropped, Err if connection should close
+async fn send_with_failure_injection(
+    framed: &mut tokio_util::codec::Framed<
+        tokio::net::TcpStream,
+        codec::null_delimited_codec::NullDelimitedCodec,
+    >,
+    message_bytes: Vec<u8>,
+    observable_state: &ObservableState,
+    context: &str,
+) -> Result<bool, std::io::Error> {
+    // Read failure config from device state
+    let failure_config = {
+        let state = observable_state.read();
+        state.failure_config.clone()
+    };
+
+    // Check if failure injection is enabled
+    if !failure_config.enabled {
+        return framed.send(message_bytes.as_slice().into()).await.map(|_| true);
+    }
+
+    // Make all random decisions first (before any awaits to avoid Send issues with ThreadRng)
+    let (should_disconnect, should_drop, delay, should_corrupt, bytes_to_send) = {
+        let mut simulator = FailureSimulator::new(failure_config.clone());
+
+        // Make all decisions
+        let disconnect = simulator.should_disconnect();
+        let drop_packet = simulator.should_drop_packet();
+        let delay = simulator.get_delay();
+        let corrupt = simulator.should_corrupt_message();
+
+        let bytes = if corrupt {
+            simulator.corrupt_message(&message_bytes)
+        } else {
+            message_bytes
+        };
+
+        // Drop simulator here (before any awaits)
+        (disconnect, drop_packet, delay, corrupt, bytes)
+    };
+
+    // Now handle the decisions (simulator is dropped, safe to await)
+    if should_disconnect {
+        println!("[FAILURE INJECTION] Force disconnect during: {}", context);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::ConnectionAborted,
+            "Simulated connection drop",
+        ));
+    }
+
+    if should_drop {
+        println!("[FAILURE INJECTION] Packet dropped: {}", context);
+        return Ok(false);
+    }
+
+    if delay.as_millis() > 0 {
+        println!(
+            "[FAILURE INJECTION] Delaying {}ms before: {}",
+            delay.as_millis(),
+            context
+        );
+        tokio::time::sleep(delay).await;
+    }
+
+    if should_corrupt {
+        println!("[FAILURE INJECTION] Corrupting message: {}", context);
+    }
+
+    framed.send(bytes_to_send.as_slice().into()).await?;
+    Ok(true)
+}
 
 #[tokio::main]
 async fn main() {
@@ -34,13 +109,14 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
     });
 
     // Create handler registry (shared across all connections)
-    let registry = Arc::new(handler::create_default_registry(observable_state));
+    let registry = Arc::new(handler::create_default_registry(observable_state.clone()));
 
     loop {
         let (stream, addr) = listener.accept().await?;
         println!("Incoming connection from {}", addr);
 
         let registry = Arc::clone(&registry);
+        let conn_observable_state = observable_state.clone();
         let mut event_rx = event_tx.subscribe();
         tokio::spawn(async move {
             let codec = codec::null_delimited_codec::NullDelimitedCodec::new();
@@ -90,9 +166,22 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                                 let response_bytes = protocol::serializer::serialize_response(&response);
                                                 println!("Sending response: MID {}", response.mid);
 
-                                                if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                                    eprintln!("send error: {e}");
-                                                    break;
+                                                match send_with_failure_injection(
+                                                    &mut framed,
+                                                    response_bytes,
+                                                    &conn_observable_state,
+                                                    &format!("MID {} response", response.mid),
+                                                ).await {
+                                                    Ok(false) => {
+                                                        // Packet was dropped, continue
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!("send error: {e}");
+                                                        break;
+                                                    }
+                                                    Ok(true) => {
+                                                        // Success
+                                                    }
                                                 }
 
                                                 // Special handling for MID 51 (vehicle ID subscription)
@@ -106,9 +195,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                                     let vin_response_bytes = protocol::serializer::serialize_response(&vin_response);
                                                     println!("Sending initial MID 0052 with current VIN: {}", current_vin);
 
-                                                    if let Err(e) = framed.send(vin_response_bytes.as_slice().into()).await {
-                                                        eprintln!("send error during initial VIN broadcast: {e}");
-                                                        break;
+                                                    match send_with_failure_injection(
+                                                        &mut framed,
+                                                        vin_response_bytes,
+                                                        &conn_observable_state,
+                                                        "MID 0052 initial VIN",
+                                                    ).await {
+                                                        Ok(false) => {}
+                                                        Err(e) => {
+                                                            eprintln!("send error during initial VIN broadcast: {e}");
+                                                            break;
+                                                        }
+                                                        Ok(true) => {}
                                                     }
                                                 }
                                             }
@@ -120,9 +218,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                                 let response_bytes = protocol::serializer::serialize_response(&response);
                                                 println!("Sending error response: MID 0004 for failed MID {}", message.mid);
 
-                                                if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                                    eprintln!("send error: {e}");
-                                                    break;
+                                                match send_with_failure_injection(
+                                                    &mut framed,
+                                                    response_bytes,
+                                                    &conn_observable_state,
+                                                    &format!("MID 0004 error for MID {}", message.mid),
+                                                ).await {
+                                                    Ok(false) => {}
+                                                    Err(e) => {
+                                                        eprintln!("send error: {e}");
+                                                        break;
+                                                    }
+                                                    Ok(true) => {}
                                                 }
                                             }
                                         }
@@ -148,9 +255,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                     let response = protocol::Response::from_data(61, 1, result);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
-                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                        eprintln!("send error during broadcast: {e}");
-                                        break;
+                                    match send_with_failure_injection(
+                                        &mut framed,
+                                        response_bytes,
+                                        &conn_observable_state,
+                                        "MID 0061 tightening broadcast",
+                                    ).await {
+                                        Ok(false) => {}
+                                        Err(e) => {
+                                            eprintln!("send error during broadcast: {e}");
+                                            break;
+                                        }
+                                        Ok(true) => {}
                                     }
                                 }
                             }
@@ -161,9 +277,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                     let response = protocol::Response::from_data(15, 1, pset_data);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
-                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                        eprintln!("send error during broadcast: {e}");
-                                        break;
+                                    match send_with_failure_injection(
+                                        &mut framed,
+                                        response_bytes,
+                                        &conn_observable_state,
+                                        "MID 0015 PSET broadcast",
+                                    ).await {
+                                        Ok(false) => {}
+                                        Err(e) => {
+                                            eprintln!("send error during broadcast: {e}");
+                                            break;
+                                        }
+                                        Ok(true) => {}
                                     }
                                 }
                             }
@@ -182,9 +307,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                     let response = protocol::Response::from_data(52, 1, vin_data);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
-                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                        eprintln!("send error during broadcast: {e}");
-                                        break;
+                                    match send_with_failure_injection(
+                                        &mut framed,
+                                        response_bytes,
+                                        &conn_observable_state,
+                                        "MID 0052 VIN broadcast",
+                                    ).await {
+                                        Ok(false) => {}
+                                        Err(e) => {
+                                            eprintln!("send error during broadcast: {e}");
+                                            break;
+                                        }
+                                        Ok(true) => {}
                                     }
                                 }
                             }
@@ -196,9 +330,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                     let response = protocol::Response::from_data(91, 1, status_data);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
-                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                        eprintln!("send error during broadcast: {e}");
-                                        break;
+                                    match send_with_failure_injection(
+                                        &mut framed,
+                                        response_bytes,
+                                        &conn_observable_state,
+                                        "MID 0091 multi-spindle status broadcast",
+                                    ).await {
+                                        Ok(false) => {}
+                                        Err(e) => {
+                                            eprintln!("send error during broadcast: {e}");
+                                            break;
+                                        }
+                                        Ok(true) => {}
                                     }
                                 }
                             }
@@ -221,9 +364,18 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
                                     let response = protocol::Response::from_data(101, 1, result_data);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
-                                    if let Err(e) = framed.send(response_bytes.as_slice().into()).await {
-                                        eprintln!("send error during broadcast: {e}");
-                                        break;
+                                    match send_with_failure_injection(
+                                        &mut framed,
+                                        response_bytes,
+                                        &conn_observable_state,
+                                        "MID 0101 multi-spindle result broadcast",
+                                    ).await {
+                                        Ok(false) => {}
+                                        Err(e) => {
+                                            eprintln!("send error during broadcast: {e}");
+                                            break;
+                                        }
+                                        Ok(true) => {}
                                     }
                                 }
                             }

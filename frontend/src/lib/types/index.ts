@@ -1,5 +1,5 @@
 // Re-export all types
-export type { DeviceState, MultiSpindleConfig } from './DeviceState';
+export type { DeviceState, MultiSpindleConfig, FailureConfig } from './DeviceState';
 export type { TighteningResult } from './TighteningResult';
 export type { SpindleResult, MultiSpindleResult, MultiSpindleStatus } from './MultiSpindle';
 export type { SimulatorEvent } from './SimulatorEvent';
@@ -22,4 +22,14 @@ export interface TighteningRequest {
 	torque?: number;
 	angle?: number;
 	ok?: boolean;
+}
+
+export interface FailureConfigRequest {
+	connection_health?: number;
+	enabled?: boolean;
+	packet_loss_rate?: number;
+	delay_min_ms?: number;
+	delay_max_ms?: number;
+	corruption_rate?: number;
+	force_disconnect_rate?: number;
 }
