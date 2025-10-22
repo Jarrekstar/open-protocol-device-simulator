@@ -3,6 +3,7 @@ pub mod batch_manager;
 pub mod codec;
 pub mod device_fsm;
 pub mod events;
+pub mod failure_simulator;
 pub mod handler;
 pub mod http_server;
 pub mod multi_spindle;

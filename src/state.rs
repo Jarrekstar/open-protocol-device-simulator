@@ -1,4 +1,5 @@
 use crate::device_fsm::DeviceFSMState;
+use crate::failure_simulator::FailureConfig;
 use crate::multi_spindle::MultiSpindleConfig;
 use crate::tightening_tracker::TighteningTracker;
 use serde::Serialize;
@@ -32,6 +33,9 @@ pub struct DeviceState {
 
     // Multi-spindle configuration
     pub multi_spindle_config: MultiSpindleConfig,
+
+    // Communication failure injection configuration
+    pub failure_config: FailureConfig,
 }
 
 impl DeviceState {
@@ -50,6 +54,7 @@ impl DeviceState {
             vehicle_id: None,
             current_job_id: Some(1),
             multi_spindle_config: MultiSpindleConfig::default(),
+            failure_config: FailureConfig::default(),
         }
     }
 
