@@ -251,97 +251,153 @@
 
 <h1 class="h1 mb-6">Control Panel</h1>
 
-<!-- PSET Selector -->
-<div class="card p-4 mb-4">
-	<h2 class="h2 mb-4">Parameter Set (PSET)</h2>
-	<div class="flex gap-4 items-end">
-		<label class="label flex-1">
-			<span class="mb-2 block">Current PSET</span>
-			<select
-				class="select"
-				value={$deviceState?.current_pset_id ?? ''}
-				on:change={(e) => {
-					const value = e.currentTarget.value;
-					if (value) {
-						handleSelectPset(Number(value));
-					}
-				}}
-			>
-				<option value="">-- Select PSET --</option>
-				{#each psets as pset}
-					<option value={pset.id}>
-						{pset.name} (Torque: {pset.torque_min}-{pset.torque_max} Nm, Angle: {pset.angle_min}°-{pset.angle_max}°)
-					</option>
-				{/each}
-			</select>
-		</label>
-		<a href="/psets" class="btn variant-ghost-surface">
-			Manage PSETs
-		</a>
-	</div>
-	{#if $deviceState?.current_pset_id}
-		<div class="mt-3 text-sm text-surface-600-300-token">
-			Active PSET: <strong>#{$deviceState.current_pset_id}</strong>
-			{#if $deviceState.current_pset_name}
-				- {$deviceState.current_pset_name}
-			{/if}
-		</div>
-	{/if}
-</div>
+<div class="space-y-6">
+	<!-- PSET -->
+	<section class="card p-6 space-y-6">
+		<header class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+			<div>
+				<h2 class="h2">Parameter Set (PSET)</h2>
+				<p class="text-sm opacity-70">Select the active torque/angle window for upcoming cycles</p>
+			</div>
+			<a href="/psets" class="btn variant-ghost-surface md:w-auto">Manage PSETs</a>
+		</header>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-	<!-- Single Tightening Simulation -->
-	<div class="card p-4">
-		<h2 class="h2 mb-4">Simulate Tightening</h2>
-		<form on:submit|preventDefault={handleSimulateTightening} class="space-y-4">
-			<!-- Use PSET checkbox -->
-			<label class="flex items-center space-x-2">
-				<input type="checkbox" class="checkbox" bind:checked={usePsetValues} />
-				<span class="font-semibold">Use PSET values</span>
+		<div class="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+			<label class="label">
+				<span class="mb-2 block text-surface-600-300-token">Current PSET</span>
+				<select
+					class="select"
+					value={$deviceState?.current_pset_id ?? ''}
+					on:change={(e) => {
+						const value = e.currentTarget.value;
+						if (value) {
+							handleSelectPset(Number(value));
+						}
+					}}
+				>
+					<option value="">-- Select PSET --</option>
+					{#each psets as pset}
+						<option value={pset.id}>
+							{pset.name} (Torque: {pset.torque_min}-{pset.torque_max} Nm, Angle: {pset.angle_min}°-{pset.angle_max}°)
+						</option>
+					{/each}
+				</select>
 			</label>
 
+			<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
+				{#if $deviceState?.current_pset_id && currentPsetTargets}
+					<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Active PSET</p>
+					<p class="mt-2 text-lg font-semibold">
+						#{$deviceState.current_pset_id}
+						{#if $deviceState.current_pset_name}
+							· {$deviceState.current_pset_name}
+						{/if}
+					</p>
+					<dl class="mt-3 grid grid-cols-2 gap-4 text-sm">
+						<div>
+							<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Target Torque</dt>
+							<dd class="mt-1 font-semibold">
+								{currentPsetTargets.torque} Nm
+							</dd>
+						</div>
+						<div>
+							<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Target Angle</dt>
+							<dd class="mt-1 font-semibold">
+								{currentPsetTargets.angle}°
+							</dd>
+						</div>
+					</dl>
+				{:else}
+					<p class="text-sm opacity-70">No PSET selected. Choose one to view its targets.</p>
+				{/if}
+			</div>
+		</div>
+	</section>
+
+	<!-- Single Tightening -->
+	<section class="card p-6 space-y-6">
+		<header>
+			<h2 class="h2">Single Tightening</h2>
+			<p class="text-sm opacity-70">
+				Run an ad-hoc cycle using the configured PSET or override values manually.
+			</p>
+		</header>
+
+		<form on:submit|preventDefault={handleSimulateTightening} class="space-y-6">
+			<div class="inline-flex rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-1">
+				<button
+					type="button"
+					class="px-4 py-2 text-sm font-semibold transition-colors rounded"
+					class:bg-primary-500={usePsetValues}
+					class:text-white={usePsetValues}
+					class:opacity-60={!usePsetValues}
+					on:click={() => (usePsetValues = true)}
+				>
+					Use PSET Values
+				</button>
+				<button
+					type="button"
+					class="px-4 py-2 text-sm font-semibold transition-colors rounded"
+					class:bg-primary-500={!usePsetValues}
+					class:text-white={!usePsetValues}
+					class:opacity-60={usePsetValues}
+					on:click={() => (usePsetValues = false)}
+				>
+					Manual Override
+				</button>
+			</div>
+
 			{#if usePsetValues}
-				<!-- Show PSET values (read-only) -->
-				<div class="p-3 bg-surface-100-800-token rounded">
+				<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
 					{#if currentPsetTargets}
-						<p class="text-sm">
-							<span class="font-semibold">PSET Target:</span>
-						</p>
-						<p class="text-sm mt-1">Torque: {currentPsetTargets.torque} Nm</p>
-						<p class="text-sm">Angle: {currentPsetTargets.angle}°</p>
-						<p class="text-sm mt-2 text-surface-500">Result determined by FSM</p>
+						<p class="text-xs uppercase tracking-wide text-surface-600-300-token">PSET Target</p>
+						<div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+							<div>
+								<p class="text-sm opacity-70">Torque</p>
+								<p class="text-xl font-semibold">
+									{currentPsetTargets.torque} Nm
+								</p>
+							</div>
+							<div>
+								<p class="text-sm opacity-70">Angle</p>
+								<p class="text-xl font-semibold">
+									{currentPsetTargets.angle}°
+								</p>
+							</div>
+						</div>
+						<p class="mt-3 text-sm opacity-70">Outcome determined automatically by the FSM.</p>
 					{:else}
-						<p class="text-sm text-surface-500">No PSET selected</p>
+						<p class="text-sm opacity-70">Select a PSET to preview its targets.</p>
 					{/if}
 				</div>
 			{:else}
-				<!-- Manual override fields -->
-				<label class="label">
-					<span>Torque (Nm)</span>
-					<input
-						type="number"
-						class="input"
-						bind:value={tighteningPayload.torque}
-						step="0.1"
-						min="0"
-						max="100"
-					/>
-				</label>
-				<label class="label">
-					<span>Angle (degrees)</span>
-					<input
-						type="number"
-						class="input"
-						bind:value={tighteningPayload.angle}
-						step="0.1"
-						min="0"
-						max="360"
-					/>
-				</label>
+				<div class="grid gap-4 md:grid-cols-2">
+					<label class="label">
+						<span class="text-surface-600-300-token">Torque (Nm)</span>
+						<input
+							type="number"
+							class="input"
+							bind:value={tighteningPayload.torque}
+							step="0.1"
+							min="0"
+							max="100"
+						/>
+					</label>
+					<label class="label">
+						<span class="text-surface-600-300-token">Angle (degrees)</span>
+						<input
+							type="number"
+							class="input"
+							bind:value={tighteningPayload.angle}
+							step="0.1"
+							min="0"
+							max="360"
+						/>
+					</label>
+				</div>
 
-				<!-- Result Mode Selector -->
 				<label class="label">
-					<span>Result Mode</span>
+					<span class="text-surface-600-300-token">Result Mode</span>
 					<select class="select" bind:value={resultMode}>
 						<option value="auto">Auto (FSM determines)</option>
 						<option value="ok">Force OK</option>
@@ -350,193 +406,233 @@
 				</label>
 			{/if}
 
-			<button type="submit" class="btn variant-filled-primary w-full">
+			<button type="submit" class="btn variant-filled-primary w-full sm:w-auto">
 				Simulate Tightening
 			</button>
 		</form>
-	</div>
+	</section>
 
-	<!-- Auto-Tightening Controls -->
-	<div class="card p-4">
-		<h2 class="h2 mb-4">Auto-Tightening</h2>
+	<!-- Auto-Tightening -->
+	<section class="card p-6 space-y-6">
+		<header>
+			<h2 class="h2">Auto-Tightening</h2>
+			<p class="text-sm opacity-70">
+				Schedule repeating cycles and monitor progress without leaving the control panel.
+			</p>
+		</header>
 
-		<div class="mb-4 p-3 bg-surface-100-800-token rounded">
-			<div class="flex justify-between">
-				<span class="font-semibold">Status:</span>
-				<span
-					class="badge"
-					class:variant-filled-success={$autoTighteningProgress.running}
-					class:variant-filled-surface={!$autoTighteningProgress.running}
-				>
-					{$autoTighteningProgress.running ? 'Running' : 'Stopped'}
-				</span>
-			</div>
-			{#if $autoTighteningProgress.target_size > 0 || $autoTighteningProgress.counter > 0}
-				<div class="flex justify-between mt-2">
-					<span class="font-semibold">Progress:</span>
-					<span>
-						{$autoTighteningProgress.counter} / {$autoTighteningProgress.target_size}
+		<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Status</p>
+					<span
+						class="badge mt-2"
+						class:variant-filled-success={$autoTighteningProgress.running}
+						class:variant-filled-surface={!$autoTighteningProgress.running}
+					>
+						{$autoTighteningProgress.running ? 'Running' : 'Stopped'}
 					</span>
 				</div>
-			{/if}
+				{#if $autoTighteningProgress.target_size > 0 || $autoTighteningProgress.counter > 0}
+					<div class="text-sm text-surface-600-300-token">
+						<p class="font-semibold">Progress</p>
+						<p class="text-surface-600-300-token">
+							{$autoTighteningProgress.counter} / {$autoTighteningProgress.target_size}
+						</p>
+					</div>
+				{/if}
+			</div>
 		</div>
 
-		<form on:submit|preventDefault={handleStartAutoTightening} class="space-y-4">
-			<label class="label">
-				<span>Interval (ms)</span>
-				<input
-					type="number"
-					class="input"
-					bind:value={autoTighteningConfig.interval_ms}
-					min="100"
-					step="100"
-				/>
-			</label>
-			<label class="label">
-				<span>Duration (ms)</span>
-				<input
-					type="number"
-					class="input"
-					bind:value={autoTighteningConfig.duration_ms}
-					min="100"
-					step="100"
-				/>
-			</label>
-			<label class="label">
-				<span>Failure Rate (0.0 - 1.0)</span>
-				<input
-					type="number"
-					class="input"
-					bind:value={autoTighteningConfig.failure_rate}
-					min="0"
-					max="1"
-					step="0.1"
-				/>
-			</label>
+		<form on:submit|preventDefault={handleStartAutoTightening} class="space-y-6">
+			<div class="grid gap-4 md:grid-cols-3">
+				<label class="label">
+					<span class="text-surface-600-300-token">Interval (ms)</span>
+					<input
+						type="number"
+						class="input"
+						bind:value={autoTighteningConfig.interval_ms}
+						min="100"
+						step="100"
+					/>
+				</label>
+				<label class="label">
+					<span class="text-surface-600-300-token">Duration (ms)</span>
+					<input
+						type="number"
+						class="input"
+						bind:value={autoTighteningConfig.duration_ms}
+						min="100"
+						step="100"
+					/>
+				</label>
+				<label class="label">
+					<span class="text-surface-600-300-token">Failure Rate (0.0 – 1.0)</span>
+					<input
+						type="number"
+						class="input"
+						bind:value={autoTighteningConfig.failure_rate}
+						min="0"
+						max="1"
+						step="0.1"
+					/>
+				</label>
+			</div>
 
-			<div class="flex gap-2">
-				<button type="submit" class="btn variant-filled-primary flex-1">Start</button>
-				<button
-					type="button"
-					class="btn variant-filled-error flex-1"
-					on:click={handleStopAutoTightening}
-				>
+			<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+				<button type="submit" class="btn variant-filled-primary sm:w-auto">Start</button>
+				<button type="button" class="btn variant-filled-error sm:w-auto" on:click={handleStopAutoTightening}>
 					Stop
 				</button>
 			</div>
 		</form>
-	</div>
+	</section>
 
-	<!-- Multi-Spindle Configuration -->
-	<div class="card p-4">
-		<h2 class="h2 mb-4">Multi-Spindle Configuration</h2>
+	<!-- Multi-Spindle -->
+	<section class="card p-6 space-y-6">
+		<header>
+			<h2 class="h2">Multi-Spindle Configuration</h2>
+			<p class="text-sm opacity-70">
+				Enable synchronized spindles and adjust counts before orchestrating multi-tool cycles.
+			</p>
+		</header>
+
 		<form on:submit|preventDefault={handleConfigureMultiSpindle} class="space-y-4">
-			<label class="flex items-center space-x-2">
+			<label class="flex items-center gap-3 rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-3">
 				<input type="checkbox" class="checkbox" bind:checked={multiSpindleConfig.enabled} />
-				<span>Enable Multi-Spindle Mode</span>
+				<span class="block">
+					<p class="font-semibold">Enable Multi-Spindle Mode</p>
+					<p class="text-sm opacity-70">When active, simulated spindles fire together per sync ID.</p>
+				</span>
 			</label>
 
 			{#if multiSpindleConfig.enabled}
-				<label class="label">
-					<span>Spindle Count (2-16)</span>
-					<input
-						type="number"
-						class="input"
-						bind:value={multiSpindleConfig.spindle_count}
-						min="2"
-						max="16"
-					/>
-				</label>
-				<label class="label">
-					<span>Sync ID</span>
-					<input type="number" class="input" bind:value={multiSpindleConfig.sync_id} min="1" />
-				</label>
+				<div class="grid gap-4 md:grid-cols-2">
+					<label class="label">
+						<span>Spindle Count (2-16)</span>
+						<input
+							type="number"
+							class="input"
+							bind:value={multiSpindleConfig.spindle_count}
+							min="2"
+							max="16"
+						/>
+					</label>
+					<label class="label">
+						<span>Sync ID</span>
+						<input type="number" class="input" bind:value={multiSpindleConfig.sync_id} min="1" />
+					</label>
+				</div>
 			{/if}
 
-			<button type="submit" class="btn variant-filled-primary w-full">
-				Apply Configuration
-			</button>
+			<div class="flex justify-end">
+				<button type="submit" class="btn variant-filled-primary sm:w-auto">
+					Apply Configuration
+				</button>
+			</div>
 		</form>
-	</div>
+	</section>
 
-	<!-- Connection Failure Injection -->
-	<div class="card p-4 lg:col-span-2">
-		<h2 class="h2 mb-4">Connection Failure Injection</h2>
+	<!-- Failure Injection -->
+	<section class="card p-6 space-y-6">
+		<header>
+			<h2 class="h2">Connection Failure Injection</h2>
+			<p class="text-sm opacity-70">
+				Dial down connection health to test client resilience. Advanced overrides are available if needed.
+			</p>
+		</header>
 
-		<!-- Status Display -->
-		<div class="mb-4 p-3 bg-surface-100-800-token rounded">
-			<div class="flex justify-between items-center">
-				<span class="font-semibold">Connection Status:</span>
-				<span class="badge {connectionStatus.color}">
-					{connectionStatus.label}
+		<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Connection Status</p>
+					<p class="mt-2 text-xl font-semibold {connectionStatus.color}">{connectionStatus.label}</p>
+				</div>
+				{#if failureConfig.enabled && failureConfig.connection_health < 100}
+					<div class="flex items-start gap-2 rounded-md bg-surface-100-800-token p-3 text-sm text-warning-600">
+						<span aria-hidden="true">⚠️</span>
+						<span>Failure injection is active. TCP clients may experience disruptions.</span>
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		<div class="space-y-3">
+			<label class="flex items-center justify-between text-sm font-semibold text-surface-600-300-token">
+				<span>Connection Health</span>
+				<span class="{connectionStatus.color} text-lg">
+					{failureConfig.connection_health}%
 				</span>
-			</div>
-			{#if failureConfig.enabled && failureConfig.connection_health < 100}
-				<div class="mt-2 text-sm text-warning-500">
-					⚠️ Warning: Failure injection is active. TCP clients will experience connection issues.
-				</div>
-			{/if}
-		</div>
-
-		<!-- Connection Health Slider -->
-		<div class="mb-6">
-			<label class="label mb-2">
-				<div class="flex justify-between items-center">
-					<span class="font-semibold text-lg">Connection Health</span>
-					<span class="text-2xl font-bold {connectionStatus.color}">
-						{failureConfig.connection_health}%
-					</span>
-				</div>
 			</label>
-			<input
-				type="range"
-				class="w-full h-3 {sliderColor}"
-				bind:value={failureConfig.connection_health}
-				min="0"
-				max="100"
-				step="1"
-				on:change={handleUpdateFailureConfig}
-			/>
-			<div class="flex justify-between text-xs text-surface-500 mt-1">
-				<span>0% (Severe)</span>
-				<span>25% (Unstable)</span>
-				<span>50% (Degraded)</span>
-				<span>75% (Healthy)</span>
-				<span>100% (Perfect)</span>
+			<div class="flex items-center gap-3">
+				<span class="text-xs uppercase tracking-wide text-surface-600-300-token w-10 text-left">0%</span>
+				<input
+					type="range"
+					class="flex-1 {sliderColor}"
+					bind:value={failureConfig.connection_health}
+					min="0"
+					max="100"
+					step="1"
+					on:change={handleUpdateFailureConfig}
+				/>
+				<span class="text-xs uppercase tracking-wide text-surface-600-300-token w-10 text-right">100%</span>
 			</div>
-			<button
-				type="button"
-				class="btn variant-ghost-surface btn-sm mt-2"
-				on:click={handleResetFailureConfig}
-			>
-				Reset to Perfect (100%)
-			</button>
+			<div class="grid grid-cols-5 text-xs text-surface-600-300-token">
+				<span>Severe</span>
+				<span class="text-center">Unstable</span>
+				<span class="text-center">Degraded</span>
+				<span class="text-center">Healthy</span>
+				<span class="text-right">Perfect</span>
+			</div>
+			<div class="flex justify-end">
+				<button type="button" class="btn variant-ghost-surface btn-sm" on:click={handleResetFailureConfig}>
+					Reset to 100%
+				</button>
+			</div>
 		</div>
 
-		<!-- Connection Health Description -->
-		<div class="mb-4 p-3 bg-surface-50-900-token rounded text-sm">
-			<p class="font-semibold mb-2">Current Configuration:</p>
-			<ul class="list-disc list-inside space-y-1">
-				<li>Packet Loss: {(failureConfig.packet_loss_rate).toFixed(1)}%</li>
-				<li>Delay Range: {failureConfig.delay_min_ms}-{failureConfig.delay_max_ms} ms</li>
-				<li>Corruption Rate: {(failureConfig.corruption_rate).toFixed(1)}%</li>
-				<li>Disconnect Rate: {(failureConfig.force_disconnect_rate).toFixed(1)}%</li>
-			</ul>
+		<div class="rounded-lg border border-dashed border-surface-200-700-token bg-surface-100-800-token p-4 text-sm">
+			<p class="font-semibold">Current Configuration</p>
+			<dl class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+				<div>
+					<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Packet Loss</dt>
+					<dd class="mt-1 font-semibold">
+						{(failureConfig.packet_loss_rate).toFixed(1)}%
+					</dd>
+				</div>
+				<div>
+					<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Delay Range</dt>
+					<dd class="mt-1 font-semibold">
+						{failureConfig.delay_min_ms}-{failureConfig.delay_max_ms} ms
+					</dd>
+				</div>
+				<div>
+					<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Corruption Rate</dt>
+					<dd class="mt-1 font-semibold">
+						{(failureConfig.corruption_rate).toFixed(1)}%
+					</dd>
+				</div>
+				<div>
+					<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Disconnect Rate</dt>
+					<dd class="mt-1 font-semibold">
+						{(failureConfig.force_disconnect_rate).toFixed(1)}%
+					</dd>
+				</div>
+			</dl>
 		</div>
 
-		<!-- Advanced Settings (Collapsible) -->
-		<details class="mb-4" bind:open={showAdvancedFailureSettings}>
-			<summary class="cursor-pointer font-semibold text-primary-500 hover:text-primary-600">
+		<details class="rounded-lg border border-surface-200-700-token p-4" bind:open={showAdvancedFailureSettings}>
+			<summary class="cursor-pointer text-sm font-semibold text-primary-500 hover:text-primary-600">
 				Advanced Settings (Manual Override)
 			</summary>
-			<div class="mt-4 space-y-4 p-4 bg-surface-50-900-token rounded">
-				<label class="flex items-center space-x-2">
+			<div class="mt-4 space-y-4">
+				<label class="flex items-center gap-3 rounded-lg bg-surface-100-800-token p-3">
 					<input type="checkbox" class="checkbox" bind:checked={failureConfig.enabled} />
 					<span class="font-semibold">Enable Failure Injection</span>
 				</label>
 
 				<label class="label">
-					<span>Packet Loss Rate (%)</span>
+					<span class="text-surface-600-300-token">Packet Loss Rate (%)</span>
 					<input
 						type="number"
 						class="input"
@@ -547,9 +643,9 @@
 					/>
 				</label>
 
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid gap-4 md:grid-cols-2">
 					<label class="label">
-						<span>Min Delay (ms)</span>
+						<span class="text-surface-600-300-token">Min Delay (ms)</span>
 						<input
 							type="number"
 							class="input"
@@ -559,7 +655,7 @@
 						/>
 					</label>
 					<label class="label">
-						<span>Max Delay (ms)</span>
+						<span class="text-surface-600-300-token">Max Delay (ms)</span>
 						<input
 							type="number"
 							class="input"
@@ -571,7 +667,7 @@
 				</div>
 
 				<label class="label">
-					<span>Corruption Rate (%)</span>
+					<span class="text-surface-600-300-token">Corruption Rate (%)</span>
 					<input
 						type="number"
 						class="input"
@@ -583,7 +679,7 @@
 				</label>
 
 				<label class="label">
-					<span>Force Disconnect Rate (%)</span>
+					<span class="text-surface-600-300-token">Force Disconnect Rate (%)</span>
 					<input
 						type="number"
 						class="input"
@@ -596,12 +692,12 @@
 
 				<button
 					type="button"
-					class="btn variant-filled-primary w-full"
+					class="btn variant-filled-primary w-full sm:w-auto"
 					on:click={handleUpdateAdvancedFailureConfig}
 				>
 					Apply Advanced Settings
 				</button>
 			</div>
 		</details>
-	</div>
+	</section>
 </div>

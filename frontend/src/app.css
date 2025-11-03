@@ -31,11 +31,11 @@ strong, b {
 /* Body background with sophisticated radial gradient mesh */
 body {
 	background:
-		radial-gradient(ellipse at 0% 0%, rgba(255, 160, 100, 0.35) 0%, transparent 50%),
-		radial-gradient(ellipse at 100% 0%, rgba(255, 140, 66, 0.25) 0%, transparent 50%),
-		radial-gradient(ellipse at 0% 100%, rgba(200, 100, 50, 0.25) 0%, transparent 45%),
-		radial-gradient(ellipse at 100% 100%, rgba(220, 120, 60, 0.25) 0%, transparent 45%),
-		linear-gradient(180deg, #d4c4b0 0%, #f5f0eb 30%, #ffffff 100%) !important;
+		radial-gradient(ellipse at 0% 0%, rgb(var(--color-primary-400) / 0.35) 0%, transparent 50%),
+		radial-gradient(ellipse at 100% 0%, rgb(var(--color-primary-400) / 0.25) 0%, transparent 50%),
+		radial-gradient(ellipse at 0% 100%, rgb(var(--color-primary-600) / 0.25) 0%, transparent 45%),
+		radial-gradient(ellipse at 100% 100%, rgb(var(--color-primary-500) / 0.25) 0%, transparent 45%),
+		linear-gradient(180deg, rgb(var(--color-surface-400)) 0%, rgb(var(--color-surface-100)) 30%, rgb(var(--color-surface-50)) 100%) !important;
 	min-height: 100vh;
 	transition: background 0.3s ease;
 }
@@ -50,19 +50,19 @@ body {
 
 /* Card styling with gradient */
 .card {
-	background: linear-gradient(135deg, #ffffff 0%, #fefdfb 100%);
-	border: 1px solid #f0e6d2;
-	box-shadow: 0 2px 8px rgba(237, 125, 49, 0.08);
+	background: linear-gradient(180deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 100%);
+	border: 1px solid rgb(var(--color-surface-300));
+	box-shadow: 0 2px 8px rgb(var(--color-primary-500) / 0.08);
 	transition: all 0.3s ease;
 }
 
 .card:hover {
-	box-shadow: 0 4px 16px rgba(237, 125, 49, 0.15);
+	box-shadow: 0 4px 16px rgb(var(--color-primary-500) / 0.15);
 }
 
 /* Primary buttons - Orange */
 .btn.variant-filled-primary {
-	background: linear-gradient(135deg, #ff8c42 0%, #ed7d31 100%);
+	background: linear-gradient(135deg, rgb(var(--color-primary-400)) 0%, rgb(var(--color-primary-500)) 100%);
 	border: none;
 	color: white;
 	font-weight: 600;
@@ -70,41 +70,41 @@ body {
 }
 
 .btn.variant-filled-primary:hover {
-	background: linear-gradient(135deg, #ff9d5c 0%, #ff8c42 100%);
-	box-shadow: 0 4px 12px rgba(237, 125, 49, 0.3);
+	background: linear-gradient(135deg, rgb(var(--color-primary-300)) 0%, rgb(var(--color-primary-400)) 100%);
+	box-shadow: 0 4px 12px rgb(var(--color-primary-500) / 0.3);
 }
 
 .btn.variant-filled-secondary {
-	background: linear-gradient(135deg, #ffa366 0%, #ff8c42 100%);
+	background: linear-gradient(135deg, rgb(var(--color-secondary-500)) 0%, rgb(var(--color-secondary-600)) 100%);
 	border: none;
 	color: white;
 	font-weight: 500;
 }
 
 .btn.variant-filled-secondary:hover {
-	background: linear-gradient(135deg, #ffb380 0%, #ffa366 100%);
+	background: linear-gradient(135deg, rgb(var(--color-secondary-400)) 0%, rgb(var(--color-secondary-500)) 100%);
 }
 
 .btn.variant-filled-error {
-	background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+	background: linear-gradient(135deg, rgb(var(--color-error-500)) 0%, rgb(var(--color-error-600)) 100%);
 }
 
 .btn.variant-filled-error:hover {
-	background: linear-gradient(135deg, #e04555 0%, #dc3545 100%);
+	background: linear-gradient(135deg, rgb(var(--color-error-400)) 0%, rgb(var(--color-error-500)) 100%);
 }
 
 .btn.variant-ghost-surface {
 	background: transparent !important;
-	border: 2px solid #e8dcc8 !important;
-	color: #5a4a3a !important;
-	box-shadow: 0 0 0 0 rgba(237, 125, 49, 0) !important;
+	border: 2px solid rgb(var(--color-surface-300)) !important;
+	color: rgb(var(--color-surface-800)) !important;
+	box-shadow: 0 0 0 0 rgb(var(--color-primary-500) / 0) !important;
 	transition: all 0.2s ease !important;
 }
 
 .btn.variant-ghost-surface:hover {
-	background: #faf8f5 !important;
-	border-color: #d4c4a8 !important;
-	box-shadow: 0 0 8px rgba(237, 125, 49, 0.15) !important;
+	background: rgb(var(--color-surface-100)) !important;
+	border-color: rgb(var(--color-surface-400)) !important;
+	box-shadow: 0 0 8px rgb(var(--color-primary-500) / 0.15) !important;
 }
 
 /* Form inputs - improved padding and styling */
@@ -113,9 +113,9 @@ body {
 .select,
 select {
 	padding: 0.75rem 1rem !important;
-	border: 2px solid #e8dcc8;
+	border: 2px solid rgb(var(--color-surface-300));
 	border-radius: 8px;
-	background: #fefdfb;
+	background: rgb(var(--color-surface-50));
 	transition: all 0.2s ease;
 	font-size: 0.95rem;
 }
@@ -124,9 +124,9 @@ select {
 .textarea:focus,
 .select:focus,
 select:focus {
-	border-color: #ff8c42;
+	border-color: rgb(var(--color-primary-400));
 	outline: none;
-	box-shadow: 0 0 0 3px rgba(255, 140, 66, 0.1);
+	box-shadow: 0 0 0 3px rgb(var(--color-primary-400) / 0.1);
 	background: white;
 }
 
@@ -141,16 +141,16 @@ input[type='number'] {
 input[type='checkbox'] {
 	width: 1.25rem;
 	height: 1.25rem;
-	border: 2px solid #e8dcc8;
+	border: 2px solid rgb(var(--color-surface-300));
 	border-radius: 4px;
 	cursor: pointer;
 }
 
 /* Badge styling */
 .badge {
-	background: linear-gradient(135deg, #fff5eb 0%, #ffe8d6 100%);
-	color: #ed7d31;
-	border: 1px solid #ffd9b3;
+	background: linear-gradient(135deg, rgb(var(--color-surface-100)) 0%, rgb(var(--color-surface-200)) 100%);
+	color: rgb(var(--color-primary-700));
+	border: 1px solid rgb(var(--color-surface-300));
 	font-weight: 600;
 	padding: 0.25rem 0.75rem;
 }
@@ -159,15 +159,15 @@ input[type='checkbox'] {
 .h1,
 .h2,
 .h3 {
-	color: #2c2416;
+	color: rgb(var(--color-surface-900));
 	font-weight: 500;
 }
 
 /* Status/Preview boxes with gradient */
 .bg-surface-100-800-token {
-	background: linear-gradient(135deg, #fff8f0 0%, #fff0e0 100%) !important;
-	border: 1px solid #ffe0c2 !important;
-	color: #8b5a2b !important;
+	background: linear-gradient(135deg, rgb(var(--color-surface-100)) 0%, rgb(var(--color-surface-200)) 100%) !important;
+	border: 1px solid rgb(var(--color-surface-300)) !important;
+	color: rgb(var(--color-surface-800)) !important;
 }
 
 /* ========================================
@@ -176,67 +176,93 @@ input[type='checkbox'] {
 
 .dark body {
 	background:
-		radial-gradient(ellipse at 0% 0%, rgba(25, 45, 38, 0.35) 0%, transparent 50%),
-		radial-gradient(ellipse at 100% 0%, rgba(18, 35, 30, 0.25) 0%, transparent 50%),
-		radial-gradient(ellipse at 0% 100%, rgba(15, 28, 24, 0.3) 0%, transparent 45%),
-		radial-gradient(ellipse at 100% 100%, rgba(16, 30, 26, 0.3) 0%, transparent 45%),
-		linear-gradient(180deg, #1d3832 0%, #18302a 30%, #0f1c18 100%) !important;
+		radial-gradient(ellipse at 0% 0%, rgb(var(--color-surface-400) / 0.35) 0%, transparent 50%),
+		radial-gradient(ellipse at 100% 0%, rgb(var(--color-surface-500) / 0.25) 0%, transparent 50%),
+		radial-gradient(ellipse at 0% 100%, rgb(var(--color-surface-600) / 0.3) 0%, transparent 45%),
+		radial-gradient(ellipse at 100% 100%, rgb(var(--color-surface-500) / 0.3) 0%, transparent 45%),
+		linear-gradient(180deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 30%, rgb(var(--color-surface-50)) 100%) !important;
 	min-height: 100vh;
+	color: rgb(var(--on-surface));
 }
 
 .dark .card {
-	background: linear-gradient(135deg, #1d3832 0%, #18302a 100%);
-	border: 1px solid #253d35;
-	box-shadow: 0 2px 8px rgba(25, 45, 38, 0.2);
+	background: linear-gradient(135deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 100%);
+	border: 1px solid rgb(var(--color-surface-300));
+	box-shadow: 0 2px 8px rgb(var(--color-surface-400) / 0.2);
 	transition: all 0.3s ease;
 }
 
 .dark .card:hover {
-	box-shadow: 0 4px 16px rgba(32, 62, 42, 0.25), 0 0 20px rgba(22, 42, 52, 0.15);
-	border-color: #2a5248;
+	box-shadow: 0 4px 16px rgb(var(--color-surface-500) / 0.25), 0 0 20px rgb(var(--color-surface-600) / 0.15);
+	border-color: rgb(var(--color-surface-500));
 }
 
 /* Primary buttons - Muted dark green */
 .dark .btn.variant-filled-primary {
-	background: linear-gradient(135deg, #2a5248 0%, #234439 100%);
+	background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%);
 	color: white;
 	font-weight: 600;
 }
 
 .dark .btn.variant-filled-primary:hover {
-	background: linear-gradient(135deg, #326056 0%, #2a5248 100%);
-	box-shadow: 0 4px 12px rgba(42, 82, 72, 0.4);
+	background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%);
+	box-shadow: 0 4px 12px rgb(var(--color-surface-600) / 0.4);
 }
 
 .dark .btn.variant-filled-secondary {
-	background: linear-gradient(135deg, #2a5248 0%, #234439 100%);
+	background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%);
 	font-weight: 500;
 }
 
 .dark .btn.variant-filled-secondary:hover {
-	background: linear-gradient(135deg, #326056 0%, #2a5248 100%);
+	background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%);
 }
 
 .dark .btn.variant-filled-error {
-	background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+	background: linear-gradient(135deg, rgb(var(--color-error-500)) 0%, rgb(var(--color-error-600)) 100%);
 }
 
 .dark .btn.variant-filled-error:hover {
-	background: linear-gradient(135deg, #e04555 0%, #dc3545 100%);
+	background: linear-gradient(135deg, rgb(var(--color-error-400)) 0%, rgb(var(--color-error-500)) 100%);
 }
 
 .dark .btn.variant-ghost-surface {
 	background: transparent !important;
-	border: 2px solid #253d35 !important;
-	color: #9bc4ba !important;
-	box-shadow: 0 0 0 0 rgba(42, 82, 72, 0) !important;
+	border: 2px solid rgb(var(--color-surface-300)) !important;
+	color: rgb(var(--on-surface)) !important;
+	box-shadow: 0 0 0 0 rgb(var(--color-surface-600) / 0) !important;
 	transition: all 0.2s ease !important;
 }
 
 .dark .btn.variant-ghost-surface:hover {
-	background: #1a2e29 !important;
-	border-color: #2a5248 !important;
-	box-shadow: 0 0 8px rgba(42, 82, 72, 0.2) !important;
+	background: rgb(var(--color-surface-200)) !important;
+	border-color: rgb(var(--color-surface-600)) !important;
+	box-shadow: 0 0 8px rgb(var(--color-surface-600) / 0.2) !important;
+}
+
+/* Delete/Error buttons should have red background in both modes */
+.btn.variant-ghost-surface[class*="error"] {
+	background: rgb(var(--color-error-500)) !important;
+	border-color: rgb(var(--color-error-500)) !important;
+	color: white !important;
+}
+
+.btn.variant-ghost-surface[class*="error"]:hover {
+	background: rgb(var(--color-error-600)) !important;
+	border-color: rgb(var(--color-error-600)) !important;
+	box-shadow: 0 4px 12px rgb(var(--color-error-500) / 0.3) !important;
+}
+
+.dark .btn.variant-ghost-surface[class*="error"] {
+	background: rgb(var(--color-error-500)) !important;
+	border-color: rgb(var(--color-error-500)) !important;
+	color: white !important;
+}
+
+.dark .btn.variant-ghost-surface[class*="error"]:hover {
+	background: rgb(var(--color-error-600)) !important;
+	border-color: rgb(var(--color-error-600)) !important;
+	box-shadow: 0 4px 12px rgb(var(--color-error-500) / 0.4) !important;
 }
 
 /* Form inputs - dark mode */
@@ -245,16 +271,16 @@ input[type='checkbox'] {
 .dark .select,
 .dark select {
 	padding: 0.75rem 1rem !important;
-	border: 2px solid #253d35;
+	border: 2px solid rgb(var(--color-surface-300));
 	border-radius: 8px;
-	background: #18302a;
-	color: #d4e8e3;
+	background: rgb(var(--color-surface-100));
+	color: rgb(var(--on-surface));
 	transition: all 0.2s ease;
 }
 
 .dark .input::placeholder,
 .dark .textarea::placeholder {
-	color: #7db8aa !important;
+	color: rgb(var(--color-surface-700)) !important;
 	opacity: 0.6;
 }
 
@@ -262,44 +288,50 @@ input[type='checkbox'] {
 .dark .textarea:focus,
 .dark .select:focus,
 .dark select:focus {
-	border-color: #2a5248;
+	border-color: rgb(var(--color-surface-600));
 	outline: none;
-	box-shadow: 0 0 0 3px rgba(42, 82, 72, 0.25);
-	background: #1d3832;
+	box-shadow: 0 0 0 3px rgb(var(--color-surface-600) / 0.25);
+	background: rgb(var(--color-surface-200));
 }
 
 .dark .checkbox,
 .dark input[type='checkbox'] {
-	border: 2px solid #253d35;
-	background: #18302a;
+	border: 2px solid rgb(var(--color-surface-300));
+	background: rgb(var(--color-surface-100));
+}
+
+/* Dropdown options in dark mode */
+.dark select option {
+	background: rgb(var(--color-surface-100));
+	color: rgb(var(--on-surface));
 }
 
 /* Badge styling - dark mode */
 .dark .badge {
-	background: linear-gradient(135deg, #253d35 0%, #1d3832 100%);
-	color: #7db8aa;
-	border: 1px solid #2a5248;
+	background: linear-gradient(135deg, rgb(var(--color-surface-300)) 0%, rgb(var(--color-surface-200)) 100%);
+	color: rgb(var(--color-surface-700));
+	border: 1px solid rgb(var(--color-surface-600));
 }
 
 /* Headings - dark mode */
 .dark .h1,
 .dark .h2,
 .dark .h3 {
-	color: #d4e8e3;
+	color: rgb(var(--on-surface));
 }
 
 /* Status/Preview boxes - dark mode */
 .dark .bg-surface-100-800-token {
-	background: linear-gradient(135deg, #1d3832 0%, #18302a 100%) !important;
-	border: 1px solid #2a5248 !important;
-	color: #9bc4ba !important;
+	background: linear-gradient(135deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 100%) !important;
+	border: 1px solid rgb(var(--color-surface-600)) !important;
+	color: rgb(var(--on-surface)) !important;
 }
 
 /* Text colors - dark mode */
 .dark .text-surface-500 {
-	color: #7db8aa !important;
+	color: rgb(var(--on-surface) / 0.6) !important;
 }
 
 .dark .text-surface-600-300-token {
-	color: #9bc4ba !important;
+	color: rgb(var(--on-surface) / 0.6) !important;
 }

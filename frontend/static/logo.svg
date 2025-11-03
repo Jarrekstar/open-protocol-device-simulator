@@ -1,0 +1,100 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient definitions -->
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2D5F5D;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1F4A48;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ECDC4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3EADA4;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="glowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ECDC4;stop-opacity:0.5" />
+      <stop offset="100%" style="stop-color:#2D5F5D;stop-opacity:0.2" />
+    </linearGradient>
+
+    <!-- Filter for glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Filter for subtle shadow -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Outer glow circle -->
+  <circle cx="100" cy="100" r="85" fill="url(#glowGradient)" opacity="0.3"/>
+
+  <!-- Main circle background -->
+  <circle cx="100" cy="100" r="75" fill="url(#mainGradient)" filter="url(#shadow)"/>
+
+  <!-- Hexagon bolt head shape -->
+  <g transform="translate(100, 100)">
+    <!-- Outer hexagon -->
+    <path d="M 0,-45 L 39,-22.5 L 39,22.5 L 0,45 L -39,22.5 L -39,-22.5 Z"
+          fill="none"
+          stroke="url(#accentGradient)"
+          stroke-width="4"
+          filter="url(#glow)"/>
+
+    <!-- Inner hexagon -->
+    <path d="M 0,-30 L 26,-15 L 26,15 L 0,30 L -26,15 L -26,-15 Z"
+          fill="rgba(255, 255, 255, 0.15)"
+          stroke="white"
+          stroke-width="2"/>
+
+    <!-- Rotation indicator - arc -->
+    <path d="M 35,-8 A 36 36 0 0 1 35,8"
+          fill="none"
+          stroke="url(#accentGradient)"
+          stroke-width="6"
+          stroke-linecap="round"
+          filter="url(#glow)"/>
+
+    <!-- Arrow head for rotation -->
+    <path d="M 35,8 L 30,14 L 36,14 Z"
+          fill="url(#accentGradient)"
+          filter="url(#glow)"/>
+
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="6" fill="white" opacity="0.9"/>
+
+    <!-- Torque lines - showing tightening force -->
+    <g opacity="0.9">
+      <line x1="-50" y1="-35" x2="-42" y2="-35" stroke="#D4E8E7" stroke-width="3" stroke-linecap="round"/>
+      <line x1="-50" y1="-25" x2="-44" y2="-25" stroke="#D4E8E7" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-50" y1="-15" x2="-46" y2="-15" stroke="#D4E8E7" stroke-width="2" stroke-linecap="round"/>
+
+      <line x1="-50" y1="35" x2="-42" y2="35" stroke="#D4E8E7" stroke-width="3" stroke-linecap="round"/>
+      <line x1="-50" y1="25" x2="-44" y2="25" stroke="#D4E8E7" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-50" y1="15" x2="-46" y2="15" stroke="#D4E8E7" stroke-width="2" stroke-linecap="round"/>
+    </g>
+
+    <!-- Angular measurement indicators -->
+    <g opacity="0.6">
+      <circle cx="0" cy="0" r="55" fill="none" stroke="white" stroke-width="1" stroke-dasharray="2,4"/>
+    </g>
+
+    <!-- Degree markers -->
+    <g opacity="0.5">
+      <rect x="-1" y="-60" width="2" height="4" fill="white"/>
+      <rect x="60" y="-1" width="4" height="2" fill="white"/>
+      <rect x="-1" y="56" width="2" height="4" fill="white"/>
+      <rect x="-64" y="-1" width="4" height="2" fill="white"/>
+    </g>
+  </g>
+
+  <!-- Accent shine effect -->
+  <g opacity="0.3">
+    <ellipse cx="70" cy="60" rx="25" ry="35" fill="white" transform="rotate(-45 70 60)"/>
+  </g>
+</svg>

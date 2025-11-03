@@ -26,7 +26,10 @@
 	<svelte:fragment slot="header">
 		<AppBar>
 			<svelte:fragment slot="lead">
-				<span class="text-xl uppercase font-medium">Device Simulator</span>
+				<div class="flex items-center gap-3">
+					<img src="/logo.svg" alt="Device Simulator Logo" class="h-10 w-10" />
+					<span class="text-xl uppercase font-medium">Device Simulator</span>
+				</div>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
 				<nav class="flex gap-4">
@@ -71,38 +74,38 @@
 
 <style>
 	:global(.app-bar.bg-surface-100-800-token) {
-		background: rgba(212, 196, 176, 0.3) !important;
+		background: rgb(var(--color-surface-400) / 0.3) !important;
 		backdrop-filter: blur(10px);
 		border: none !important;
-		border-bottom: 1px solid rgba(200, 180, 160, 0.3) !important;
+		border-bottom: 1px solid rgb(var(--color-surface-400) / 0.3) !important;
 		box-shadow: none !important;
-		color: #2c2416 !important;
+		color: rgb(var(--color-surface-900)) !important;
 	}
 
 	:global(.dark .app-bar.bg-surface-100-800-token) {
-		background: rgba(29, 56, 50, 0.3) !important;
-		border-bottom: 1px solid rgba(42, 82, 72, 0.3) !important;
-		color: #d4e8e3 !important;
+		background: rgb(var(--color-surface-200) / 0.3) !important;
+		border-bottom: 1px solid rgb(var(--color-surface-500) / 0.3) !important;
+		color: rgb(var(--color-surface-800)) !important;
 	}
 
 	/* Fix AppBar button colors in dark mode */
 	:global(.dark .app-bar .btn.variant-ghost-surface) {
-		border-color: #253d35 !important;
-		color: #9bc4ba !important;
+		border-color: rgb(var(--color-surface-300)) !important;
+		color: rgb(var(--on-surface)) !important;
 	}
 
 	:global(.dark .app-bar .btn.variant-ghost-surface:hover) {
-		border-color: #2a5248 !important;
-		background: #1a2e29 !important;
+		border-color: rgb(var(--color-surface-600)) !important;
+		background: rgb(var(--color-surface-200)) !important;
 	}
 
 	:global(.dark .app-bar .btn.variant-filled-primary) {
-		background: linear-gradient(135deg, #2a5248 0%, #234439 100%) !important;
+		background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%) !important;
 		border: none !important;
 		color: white !important;
 	}
 
 	:global(.dark .app-bar .btn.variant-filled-primary:hover) {
-		background: linear-gradient(135deg, #326156 0%, #2a5248 100%) !important;
+		background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%) !important;
 	}
 </style>
