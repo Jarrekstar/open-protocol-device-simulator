@@ -3,6 +3,10 @@
 @tailwind utilities;
 @tailwind variants;
 
+/* ========================================
+   Base Styles
+   ======================================== */
+
 html,
 body {
 	@apply h-full overflow-hidden;
@@ -46,7 +50,6 @@ body {
 [data-shell] {
 	background: transparent !important;
 }
-
 
 /* Card styling with gradient */
 .card {
@@ -240,31 +243,6 @@ input[type='checkbox'] {
 	box-shadow: 0 0 8px rgb(var(--color-surface-600) / 0.2) !important;
 }
 
-/* Delete/Error buttons should have red background in both modes */
-.btn.variant-ghost-surface[class*="error"] {
-	background: rgb(var(--color-error-500)) !important;
-	border-color: rgb(var(--color-error-500)) !important;
-	color: white !important;
-}
-
-.btn.variant-ghost-surface[class*="error"]:hover {
-	background: rgb(var(--color-error-600)) !important;
-	border-color: rgb(var(--color-error-600)) !important;
-	box-shadow: 0 4px 12px rgb(var(--color-error-500) / 0.3) !important;
-}
-
-.dark .btn.variant-ghost-surface[class*="error"] {
-	background: rgb(var(--color-error-500)) !important;
-	border-color: rgb(var(--color-error-500)) !important;
-	color: white !important;
-}
-
-.dark .btn.variant-ghost-surface[class*="error"]:hover {
-	background: rgb(var(--color-error-600)) !important;
-	border-color: rgb(var(--color-error-600)) !important;
-	box-shadow: 0 4px 12px rgb(var(--color-error-500) / 0.4) !important;
-}
-
 /* Form inputs - dark mode */
 .dark .input,
 .dark .textarea,
@@ -334,4 +312,40 @@ input[type='checkbox'] {
 
 .dark .text-surface-600-300-token {
 	color: rgb(var(--on-surface) / 0.6) !important;
+}
+
+/* ========================================
+   Modal Styles
+   ======================================== */
+
+.modal-backdrop {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgb(var(--color-surface-900) / 0.6);
+	backdrop-filter: blur(4px);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 1000;
+}
+
+.dark .modal-backdrop {
+	background: rgb(var(--color-surface-50) / 0.8);
+}
+
+.modal-content {
+	width: 90%;
+	max-height: 90vh;
+	overflow-y: auto;
+}
+
+/* ========================================
+   Form Validation Styles
+   ======================================== */
+
+.input-error {
+	border-color: rgb(var(--color-error-500)) !important;
 }
