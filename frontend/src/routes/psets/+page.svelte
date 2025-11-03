@@ -172,90 +172,108 @@
 	<title>PSET Management - Device Simulator</title>
 </svelte:head>
 
-<div class="container mx-auto">
-	<div class="flex justify-between items-center mb-6">
-		<h1 class="h1">Parameter Sets (PSETs)</h1>
-		<button class="btn variant-filled-primary" on:click={openCreateModal}>
+<div class="mx-auto max-w-6xl space-y-6">
+	<header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div>
+			<h1 class="h1">Parameter Sets (PSETs)</h1>
+			<p class="text-sm opacity-70">Manage reusable torque and angle presets for quick selection.</p>
+		</div>
+		<button class="btn variant-filled-primary sm:w-auto" on:click={openCreateModal}>
 			<span>+ Create New PSET</span>
 		</button>
-	</div>
+	</header>
 
 	{#if loading}
-		<div class="flex justify-center items-center h-64">
-			<div class="text-lg">Loading PSETs...</div>
+		<div class="flex h-64 items-center justify-center">
+			<div class="text-lg text-surface-500">Loading PSETs...</div>
 		</div>
 	{:else if psets.length === 0}
-		<div class="card p-8 text-center">
-			<p class="text-lg text-surface-600-300-token mb-4">No PSETs available</p>
-			<button class="btn variant-filled-primary" on:click={openCreateModal}>
+		<div class="card p-10 text-center">
+			<p class="text-lg text-surface-600-300-token">No PSETs available yet.</p>
+			<p class="mt-2 text-sm opacity-70">Create one to define tightening targets for your scenarios.</p>
+			<button class="btn variant-filled-primary mt-4" on:click={openCreateModal}>
 				Create Your First PSET
 			</button>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+		<div class="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
 			{#each psets as pset (pset.id)}
-				<div class="card p-6">
-					<div class="flex justify-between items-start mb-4">
-						<div>
-							<h3 class="h3 mb-1">{pset.name}</h3>
-							<span class="badge variant-filled-surface">ID: {pset.id}</span>
-						</div>
-					</div>
+				<article class="card flex h-full flex-col gap-4 p-6">
+					<header class="rounded-lg bg-surface-100-800-token p-4">
+						<h3 class="text-lg font-semibold">{pset.name}</h3>
+						<p class="text-sm opacity-60">ID: {pset.id}</p>
+					</header>
 
 					{#if pset.description}
-						<p class="text-sm text-surface-600-300-token mb-4">{pset.description}</p>
+						<p class="text-sm text-surface-600-300-token">{pset.description}</p>
+					{:else}
+						<p class="text-sm opacity-70">No description provided.</p>
 					{/if}
 
-					<div class="space-y-2 mb-4">
-						<div class="flex justify-between">
-							<span class="font-semibold">Torque Range:</span>
-							<span>{pset.torque_min} - {pset.torque_max} Nm</span>
+					<dl class="grid grid-cols-2 gap-4 rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4 text-sm">
+						<div>
+							<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Torque Range</dt>
+							<dd class="mt-1 font-semibold text-surface-600-300-token">
+								{pset.torque_min} – {pset.torque_max} Nm
+							</dd>
 						</div>
-						<div class="flex justify-between">
-							<span class="font-semibold">Angle Range:</span>
-							<span>{pset.angle_min}° - {pset.angle_max}°</span>
+						<div>
+							<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Angle Range</dt>
+							<dd class="mt-1 font-semibold text-surface-600-300-token">
+								{pset.angle_min}° – {pset.angle_max}°
+							</dd>
 						</div>
-						<div class="flex justify-between text-sm text-surface-600-300-token">
-							<span>Target:</span>
-							<span
-								>{((pset.torque_min + pset.torque_max) / 2).toFixed(1)} Nm, {((pset.angle_min +
-									pset.angle_max) /
-									2).toFixed(1)}°</span
-							>
+						<div>
+							<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Target Torque</dt>
+							<dd class="mt-1 font-semibold text-surface-600-300-token">
+								{((pset.torque_min + pset.torque_max) / 2).toFixed(1)} Nm
+							</dd>
 						</div>
-					</div>
+						<div>
+							<dt class="text-xs uppercase tracking-wide text-surface-600-300-token">Target Angle</dt>
+							<dd class="mt-1 font-semibold text-surface-600-300-token">
+								{((pset.angle_min + pset.angle_max) / 2).toFixed(1)}°
+							</dd>
+						</div>
+					</dl>
 
-					<div class="flex gap-2">
-						<button
-							class="btn btn-sm variant-filled-secondary flex-1"
-							on:click={() => openEditModal(pset)}
-						>
-							Edit
-						</button>
-
-						{#if deleteConfirmId === pset.id}
+					<footer class="mt-auto space-y-3 border-t border-surface-200-700-token pt-4">
+						<div class="flex gap-2">
 							<button
-								class="btn btn-sm variant-filled-error flex-1"
-								on:click={() => handleDelete(pset.id)}
+								class="btn btn-sm variant-filled-secondary flex-1"
+								on:click={() => openEditModal(pset)}
 							>
-								Confirm Delete?
+								Edit
 							</button>
 							<button
-								class="btn btn-sm variant-ghost-surface"
-								on:click={() => (deleteConfirmId = null)}
-							>
-								Cancel
-							</button>
-						{:else}
-							<button
-								class="btn btn-sm variant-filled-error flex-1"
-								on:click={() => (deleteConfirmId = pset.id)}
+								class="btn btn-sm variant-ghost-surface btn-error flex-1"
+								on:click={() => (deleteConfirmId = deleteConfirmId === pset.id ? null : pset.id)}
 							>
 								Delete
 							</button>
+						</div>
+
+						{#if deleteConfirmId === pset.id}
+							<div class="space-y-3 rounded-lg border border-error-500 bg-surface-100-800-token p-3 text-sm text-error-600">
+								<p>Delete {pset.name}? This action cannot be undone.</p>
+								<div class="flex gap-2">
+									<button
+										class="btn btn-sm variant-filled-error flex-1"
+										on:click={() => handleDelete(pset.id)}
+									>
+										Confirm
+									</button>
+									<button
+										class="btn btn-sm variant-ghost-surface flex-1"
+										on:click={() => (deleteConfirmId = null)}
+									>
+										Cancel
+									</button>
+								</div>
+							</div>
 						{/if}
-					</div>
-				</div>
+					</footer>
+				</article>
 			{/each}
 		</div>
 	{/if}
@@ -264,10 +282,19 @@
 <!-- Modal for Create/Edit -->
 {#if showModal}
 	<div class="modal-backdrop" on:click={() => (showModal = false)} transition:fade={{ duration: 150 }}>
-		<div class="modal-content card p-6" on:click|stopPropagation transition:scale={{ duration: 200, start: 0.95 }}>
-			<h2 class="h2 mb-4">{modalMode === 'create' ? 'Create New PSET' : 'Edit PSET'}</h2>
+		<div
+			class="modal-content rounded-2xl border border-surface-200-700-token bg-surface-100-800-token p-6 shadow-2xl"
+			on:click|stopPropagation
+			transition:scale={{ duration: 200, start: 0.95 }}
+		>
+			<header class="mb-4">
+				<h2 class="h2">{modalMode === 'create' ? 'Create New PSET' : 'Edit PSET'}</h2>
+				<p class="text-sm opacity-70">
+					Define the torque and angle window that devices should target.
+				</p>
+			</header>
 
-			<form on:submit|preventDefault={handleSubmit} class="space-y-4">
+			<form on:submit|preventDefault={handleSubmit} class="space-y-5">
 				<label class="label">
 					<span>Name *</span>
 					<input
@@ -363,7 +390,7 @@
 				</div>
 
 				<div class="flex gap-2 pt-4">
-					<button type="submit" class="btn variant-filled-primary flex-1">
+					<button type="submit" class="btn variant-filled-primary flex-1 sm:flex-none sm:px-8">
 						{modalMode === 'create' ? 'Create' : 'Update'}
 					</button>
 					<button
@@ -380,22 +407,17 @@
 {/if}
 
 <style>
-	.container {
-		max-width: 1400px;
-	}
-
 	.input-error {
 		border-color: rgb(var(--color-error-500)) !important;
 	}
 
-	/* Modal styling - Light mode */
 	.modal-backdrop {
 		position: fixed;
 		top: 0;
 		left: 0;
 		width: 100%;
 		height: 100%;
-		background: rgba(0, 0, 0, 0.6);
+		background: rgb(var(--color-surface-900) / 0.6);
 		backdrop-filter: blur(4px);
 		display: flex;
 		justify-content: center;
@@ -408,27 +430,10 @@
 		width: 90%;
 		max-height: 90vh;
 		overflow-y: auto;
-		background: linear-gradient(135deg, #ffffff 0%, #fefdfb 100%);
-		border: 2px solid #f0e6d2;
-		box-shadow: 0 8px 32px rgba(237, 125, 49, 0.15);
 	}
 
-	.modal-content:hover {
-		box-shadow: 0 8px 32px rgba(237, 125, 49, 0.15);
-	}
-
-	/* Modal styling - Dark mode */
 	:global(.dark) .modal-backdrop {
-		background: rgba(0, 0, 0, 0.8);
+		background: rgb(var(--color-surface-50) / 0.8);
 	}
 
-	:global(.dark) .modal-content {
-		background: linear-gradient(135deg, #1d3832 0%, #18302a 100%);
-		border: 2px solid #253d35;
-		box-shadow: 0 8px 32px rgba(25, 45, 38, 0.4), 0 0 48px rgba(42, 82, 72, 0.25);
-	}
-
-	:global(.dark) .modal-content:hover {
-		box-shadow: 0 8px 32px rgba(25, 45, 38, 0.4), 0 0 48px rgba(42, 82, 72, 0.25);
-	}
 </style>
