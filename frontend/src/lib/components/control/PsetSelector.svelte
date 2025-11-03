@@ -40,7 +40,7 @@
 			<select
 				class="select"
 				value={$deviceState?.current_pset_id || ''}
-				on:change={(e) => handleSelectPset(Number(e.currentTarget.value))}
+				onchange={(e) => handleSelectPset(Number(e.currentTarget.value))}
 			>
 				{#each psets as pset}
 					<option value={pset.id}>

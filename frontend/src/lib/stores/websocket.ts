@@ -10,6 +10,67 @@ export const reconnectAttempts = writable(0);
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Event handler map for routing WebSocket events to appropriate store updates
+ */
+const eventHandlers: Record<string, (event: any) => void> = {
+	TighteningCompleted: (event) => {
+		addTighteningResult(event.result);
+		addEvent(event);
+	},
+
+	ToolStateChanged: (event) => {
+		deviceState.update((state) => {
+			if (state) {
+				state.tool_enabled = event.enabled;
+			}
+			return state;
+		});
+		addEvent(event);
+	},
+
+	AutoTighteningProgress: (event) => {
+		autoTighteningProgress.set({
+			counter: event.counter,
+			target_size: event.target_size,
+			running: event.running
+		});
+	},
+
+	PsetChanged: (event) => {
+		deviceState.update((state) => {
+			if (state) {
+				state.current_pset_id = event.pset_id;
+				state.current_pset_name = event.pset_name;
+			}
+			return state;
+		});
+		addEvent(event);
+	},
+
+	VehicleIdChanged: (event) => {
+		deviceState.update((state) => {
+			if (state) {
+				state.vehicle_id_number = event.vin;
+			}
+			return state;
+		});
+		addEvent(event);
+	},
+
+	MultiSpindleResultCompleted: (event) => {
+		addEvent(event);
+	},
+
+	MultiSpindleStatusCompleted: (event) => {
+		addEvent(event);
+	},
+
+	BatchCompleted: (event) => {
+		addEvent(event);
+	}
+};
+
 export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') {
 	if (ws?.readyState === WebSocket.OPEN) {
 		console.log('WebSocket already connected');
@@ -37,57 +98,10 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 			// Otherwise it's a SimulatorEvent
 			const simEvent = data as SimulatorEvent;
 
-			// Route event to appropriate stores
-			switch (simEvent.type) {
-				case 'TighteningCompleted':
-					addTighteningResult(simEvent.result);
-					addEvent(simEvent);
-					break;
-
-				case 'ToolStateChanged':
-					deviceState.update((state) => {
-						if (state) {
-							state.tool_enabled = simEvent.enabled;
-						}
-						return state;
-					});
-					addEvent(simEvent);
-					break;
-
-				case 'AutoTighteningProgress':
-					autoTighteningProgress.set({
-						counter: simEvent.counter,
-						target_size: simEvent.target_size,
-						running: simEvent.running
-					});
-					break;
-
-				case 'PsetChanged':
-					deviceState.update((state) => {
-						if (state) {
-							state.current_pset_id = simEvent.pset_id;
-							state.current_pset_name = simEvent.pset_name;
-						}
-						return state;
-					});
-					addEvent(simEvent);
-					break;
-
-				case 'VehicleIdChanged':
-					deviceState.update((state) => {
-						if (state) {
-							state.vehicle_id_number = simEvent.vin;
-						}
-						return state;
-					});
-					addEvent(simEvent);
-					break;
-
-				case 'MultiSpindleResultCompleted':
-				case 'MultiSpindleStatusCompleted':
-				case 'BatchCompleted':
-					addEvent(simEvent);
-					break;
+			// Route event to appropriate handler
+			const handler = eventHandlers[simEvent.type];
+			if (handler) {
+				handler(simEvent);
 			}
 		} catch (error) {
 			console.error('Failed to parse WebSocket message:', error);

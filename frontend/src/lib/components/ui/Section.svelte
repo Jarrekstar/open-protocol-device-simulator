@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import Card from './Card.svelte';
 
 	/**
@@ -16,7 +17,9 @@
 		/** Spacing between children */
 		spacing?: 'sm' | 'md' | 'lg' | 'none';
 		/** Header action slot */
-		headerAction?: any;
+		headerAction?: Snippet;
+		/** Section content */
+		children: Snippet;
 	}
 
 	let {
