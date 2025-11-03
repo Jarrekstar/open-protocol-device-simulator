@@ -4,6 +4,9 @@
 	import { events } from '$lib/stores/events';
 	import { api } from '$lib/api/client';
 	import { showToast } from '$lib/stores/ui';
+	import { StatCard, Badge } from '$lib/components/ui';
+	import { EventTimeline } from '$lib/components/events';
+	import { formatPercentage } from '$lib/utils';
 
 	async function handleSimulateTightening() {
 		try {
@@ -139,26 +142,10 @@
 			<span class="text-xs uppercase tracking-wide opacity-60">Rolling aggregates</span>
 		</div>
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-			<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
-				<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Total Cycles</p>
-				<p class="mt-2 text-2xl font-semibold">{$tighteningStats.total}</p>
-			</div>
-			<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
-				<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Success Rate</p>
-				<p class="mt-2 text-2xl font-semibold">{$tighteningStats.successRate.toFixed(1)}%</p>
-			</div>
-			<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
-				<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Average Torque</p>
-				<p class="mt-2 text-2xl font-semibold">
-					{$tighteningStats.avgTorque.toFixed(2)} <span class="text-base font-normal">Nm</span>
-				</p>
-			</div>
-			<div class="rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-4">
-				<p class="text-xs uppercase tracking-wide text-surface-600-300-token">Average Angle</p>
-				<p class="mt-2 text-2xl font-semibold">
-					{$tighteningStats.avgAngle.toFixed(1)}<span class="text-base font-normal">°</span>
-				</p>
-			</div>
+			<StatCard label="Total Cycles" value={$tighteningStats.total} />
+			<StatCard label="Success Rate" value={formatPercentage($tighteningStats.successRate)} />
+			<StatCard label="Average Torque" value={$tighteningStats.avgTorque.toFixed(2)} unit="Nm" />
+			<StatCard label="Average Angle" value={$tighteningStats.avgAngle.toFixed(1)} unit="°" />
 		</div>
 	</section>
 
@@ -172,41 +159,6 @@
 			<a href="/events" class="btn variant-ghost-surface">View All Events →</a>
 		</div>
 
-		{#if $events.length > 0}
-			<ol class="relative border-l border-surface-200-700-token pl-6">
-				{#each $events.slice(0, 5) as event, index}
-					<li class="mb-6 last:mb-0">
-						<span
-							class="absolute -left-3 mt-2 h-3 w-3 rounded-full border border-surface-100-800-token bg-primary-500"
-							aria-hidden="true"
-						/>
-						<div class="flex items-center justify-between">
-							<span class="badge variant-soft">{event.type}</span>
-							<span class="text-xs uppercase tracking-wide text-surface-600-300-token">#{index + 1}</span>
-						</div>
-						<div class="mt-3 text-sm text-surface-600-300-token">
-							{#if event.type === 'TighteningCompleted'}
-								Torque {event.result.torque.toFixed(2)} Nm · Angle {event.result.angle.toFixed(1)}° ·
-								Batch {event.result.batch_counter}/{event.result.batch_size}
-							{:else if event.type === 'BatchCompleted'}
-								Batch completed · Total {event.total}
-							{:else if event.type === 'ToolStateChanged'}
-								Tool {event.enabled ? 'enabled' : 'disabled'}
-							{:else if event.type === 'PsetChanged'}
-								PSET changed to {event.pset_name} (ID {event.pset_id})
-							{:else if event.type === 'VehicleIdChanged'}
-								VIN updated to {event.vin}
-							{:else if event.type === 'MultiSpindleResultCompleted'}
-								Multi-spindle result · {event.result.spindle_count} spindles · Sync {event.result.sync_id}
-							{:else if event.type === 'MultiSpindleStatusCompleted'}
-								Multi-spindle status · Sync {event.status.sync_id} · Spindles {event.status.spindle_count}
-							{/if}
-						</div>
-					</li>
-				{/each}
-			</ol>
-		{:else}
-			<p class="opacity-70">No events yet</p>
-		{/if}
+		<EventTimeline events={$events} limit={5} showNumbers={true} />
 	</section>
 </div>
