@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	/**
 	 * Reusable card component with consistent styling
 	 */
@@ -9,6 +11,8 @@
 		padding?: 'sm' | 'md' | 'lg' | 'none';
 		/** Spacing between children */
 		spacing?: 'sm' | 'md' | 'lg' | 'none';
+		/** Card content */
+		children: Snippet;
 	}
 
 	let { class: className = '', padding = 'md', spacing = 'md', children }: Props = $props();

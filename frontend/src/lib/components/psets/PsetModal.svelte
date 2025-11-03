@@ -6,7 +6,7 @@
 	interface Props {
 		open: boolean;
 		mode: 'create' | 'edit';
-		pset?: Pset;
+		pset?: Pset | null;
 		onsubmit: (data: Partial<Pset>) => Promise<void>;
 		onclose: () => void;
 	}
@@ -18,5 +18,5 @@
 </script>
 
 <Modal {open} {title} {description} {onclose}>
-	<PsetForm {mode} initialData={pset} {onsubmit} oncancel={onclose} />
+	<PsetForm {mode} initialData={pset ?? undefined} {onsubmit} oncancel={onclose} />
 </Modal>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, scale } from 'svelte/transition';
+	import type { Snippet } from 'svelte';
 
 	/**
 	 * Modal component with backdrop and transitions
@@ -17,6 +18,8 @@
 		class?: string;
 		/** Max width */
 		maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+		/** Modal content */
+		children: Snippet;
 	}
 
 	let { open, onclose, title, description, class: className = '', maxWidth = 'md', children }: Props =
@@ -35,14 +38,18 @@
 </script>
 
 {#if open}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="modal-backdrop"
-		on:click={handleBackdropClick}
+		onclick={handleBackdropClick}
 		transition:fade={{ duration: 150 }}
 	>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="modal-content rounded-2xl border border-surface-200-700-token bg-surface-100-800-token p-6 shadow-2xl {maxWidthClasses[maxWidth]} {className}"
-			on:click|stopPropagation
+			onclick={(e) => e.stopPropagation()}
 			transition:scale={{ duration: 200, start: 0.95 }}
 		>
 			{#if title}

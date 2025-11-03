@@ -31,7 +31,7 @@
 				<span
 					class="absolute -left-3 mt-2 h-3 w-3 rounded-full border border-surface-100-800-token bg-primary-500"
 					aria-hidden="true"
-				/>
+				></span>
 				<div class="flex items-center justify-between">
 					<Badge variant="soft">{event.type}</Badge>
 					{#if showNumbers}

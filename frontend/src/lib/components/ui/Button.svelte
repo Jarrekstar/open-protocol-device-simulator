@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	/**
 	 * Button component with variants
 	 */
@@ -18,6 +20,8 @@
 		class?: string;
 		/** Click handler */
 		onclick?: (event: MouseEvent) => void;
+		/** Button content */
+		children: Snippet;
 	}
 
 	let {

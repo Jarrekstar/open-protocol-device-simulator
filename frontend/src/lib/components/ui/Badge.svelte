@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	/**
 	 * Badge component with variants
 	 */
@@ -13,6 +15,8 @@
 			| 'filled-warning';
 		/** Additional CSS classes */
 		class?: string;
+		/** Badge content */
+		children: Snippet;
 	}
 
 	let { variant = 'soft', class: className = '', children }: Props = $props();

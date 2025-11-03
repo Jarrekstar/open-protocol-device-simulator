@@ -349,3 +349,43 @@ input[type='checkbox'] {
 .input-error {
 	border-color: rgb(var(--color-error-500)) !important;
 }
+
+/* ========================================
+   AppBar Styles
+   ======================================== */
+
+.app-bar.bg-surface-100-800-token {
+	background: rgb(var(--color-surface-400) / 0.3) !important;
+	backdrop-filter: blur(10px);
+	border: none !important;
+	border-bottom: 1px solid rgb(var(--color-surface-400) / 0.3) !important;
+	box-shadow: none !important;
+	color: rgb(var(--color-surface-900)) !important;
+}
+
+.dark .app-bar.bg-surface-100-800-token {
+	background: rgb(var(--color-surface-200) / 0.3) !important;
+	border-bottom: 1px solid rgb(var(--color-surface-500) / 0.3) !important;
+	color: rgb(var(--color-surface-800)) !important;
+}
+
+/* Fix AppBar button colors in dark mode */
+.dark .app-bar .btn.variant-ghost-surface {
+	border-color: rgb(var(--color-surface-300)) !important;
+	color: rgb(var(--on-surface)) !important;
+}
+
+.dark .app-bar .btn.variant-ghost-surface:hover {
+	border-color: rgb(var(--color-surface-600)) !important;
+	background: rgb(var(--color-surface-200)) !important;
+}
+
+.dark .app-bar .btn.variant-filled-primary {
+	background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%) !important;
+	border: none !important;
+	color: white !important;
+}
+
+.dark .app-bar .btn.variant-filled-primary:hover {
+	background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%) !important;
+}

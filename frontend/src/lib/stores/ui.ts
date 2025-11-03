@@ -1,5 +1,8 @@
 import { writable } from 'svelte/store';
 
+/**
+ * Toast notification interface
+ */
 export interface Toast {
 	id: string;
 	type: 'success' | 'error' | 'info' | 'warning';
@@ -7,9 +10,15 @@ export interface Toast {
 	duration?: number;
 }
 
+/**
+ * Global toast notifications store
+ */
 export const toasts = writable<Toast[]>([]);
-export const activeModal = writable<string | null>(null);
 
+/**
+ * Display a toast notification
+ * @param toast - Toast configuration without id
+ */
 export function showToast(toast: Omit<Toast, 'id'>) {
 	const id = crypto.randomUUID();
 	const fullToast: Toast = { id, duration: 3000, ...toast };
@@ -23,14 +32,10 @@ export function showToast(toast: Omit<Toast, 'id'>) {
 	}
 }
 
+/**
+ * Dismiss a toast notification by id
+ * @param id - Toast id to dismiss
+ */
 export function dismissToast(id: string) {
 	toasts.update((list) => list.filter((t) => t.id !== id));
-}
-
-export function openModal(modalId: string) {
-	activeModal.set(modalId);
-}
-
-export function closeModal() {
-	activeModal.set(null);
 }
