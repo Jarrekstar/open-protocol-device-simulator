@@ -6,14 +6,14 @@
 	import { showToast } from '$lib/stores/ui';
 	import { StatCard, Badge } from '$lib/components/ui';
 	import { EventTimeline } from '$lib/components/events';
-	import { formatPercentage } from '$lib/utils';
+	import { formatPercentage, formatErrorMessage } from '$lib/utils';
 
 	async function handleSimulateTightening() {
 		try {
 			await api.simulateTightening();
 			showToast({ type: 'success', message: 'Tightening simulated!' });
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('simulate tightening', error) });
 		}
 	}
 </script>
@@ -26,7 +26,7 @@
 	<h1 class="h1">Operations Overview</h1>
 
 	<!-- Device + Latest Tightening Hero -->
-	<section class="card p-6 space-y-6 lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0">
+	<section class="card p-6 space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
 		<div class="space-y-4">
 			<div>
 				<h2 class="h2">Device Status</h2>

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api/client';
 	import { showToast } from '$lib/stores/ui';
+	import { formatErrorMessage } from '$lib/utils';
 	import { Button, Card } from '$lib/components/ui';
 	import { PsetModal, PsetCard } from '$lib/components/psets';
 	import type { Pset } from '$lib/types';
@@ -18,7 +19,7 @@
 			loading = true;
 			psets = await api.getPsets();
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed to load PSETs: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('load PSETs', error) });
 		} finally {
 			loading = false;
 		}
@@ -68,9 +69,8 @@
 
 			closeModal();
 			await loadPsets();
-		} catch (error: any) {
-			const errorMessage = error?.message || String(error);
-			showToast({ type: 'error', message: `Failed to save PSET: ${errorMessage}` });
+		} catch (error) {
+			showToast({ type: 'error', message: formatErrorMessage('save PSET', error) });
 			throw error; // Re-throw to keep form in submitting state
 		}
 	}
@@ -81,9 +81,8 @@
 			showToast({ type: 'success', message: 'PSET deleted successfully!' });
 			deleteConfirmId = null;
 			await loadPsets();
-		} catch (error: any) {
-			const errorMessage = error?.message || String(error);
-			showToast({ type: 'error', message: `Failed to delete PSET: ${errorMessage}` });
+		} catch (error) {
+			showToast({ type: 'error', message: formatErrorMessage('delete PSET', error) });
 		}
 	}
 

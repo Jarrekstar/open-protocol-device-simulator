@@ -3,7 +3,7 @@
 	import { api } from '$lib/api/client';
 	import { showToast } from '$lib/stores/ui';
 	import { Section, Badge } from '$lib/components/ui';
-	import { getPsetTargets } from '$lib/utils';
+	import { getPsetTargets, formatErrorMessage } from '$lib/utils';
 	import type { Pset } from '$lib/types';
 
 	interface Props {
@@ -25,7 +25,7 @@
 			await api.selectPset(psetId);
 			showToast({ type: 'success', message: `PSET ${psetId} selected!` });
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed to select PSET: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('select PSET', error) });
 		}
 	}
 </script>

@@ -3,29 +3,37 @@
 	import { showToast } from '$lib/stores/ui';
 	import { autoTighteningProgress } from '$lib/stores/tightening';
 	import { Section, Button, FormField, Badge } from '$lib/components/ui';
-	import { formatBatchCounter } from '$lib/utils';
+	import { formatBatchCounter, formatErrorMessage } from '$lib/utils';
 
 	let config = $state({
 		interval_ms: 1000,
 		duration_ms: 500,
 		failure_rate: 0.0
 	});
+	let isStarting = $state(false);
+	let isStopping = $state(false);
 
 	async function handleStart() {
+		isStarting = true;
 		try {
 			await api.startAutoTightening(config);
 			showToast({ type: 'success', message: 'Auto-tightening started!' });
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('start auto-tightening', error) });
+		} finally {
+			isStarting = false;
 		}
 	}
 
 	async function handleStop() {
+		isStopping = true;
 		try {
 			await api.stopAutoTightening();
 			showToast({ type: 'success', message: 'Auto-tightening stopped!' });
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('stop auto-tightening', error) });
+		} finally {
+			isStopping = false;
 		}
 	}
 </script>
@@ -95,9 +103,11 @@
 		</div>
 
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-			<Button type="submit" class="sm:w-auto">Start</Button>
-			<Button variant="filled-error" type="button" onclick={handleStop} class="sm:w-auto">
-				Stop
+			<Button type="submit" disabled={isStarting} class="sm:w-auto">
+				{isStarting ? 'Starting...' : 'Start'}
+			</Button>
+			<Button variant="filled-error" type="button" onclick={handleStop} disabled={isStopping} class="sm:w-auto">
+				{isStopping ? 'Stopping...' : 'Stop'}
 			</Button>
 		</div>
 	</form>

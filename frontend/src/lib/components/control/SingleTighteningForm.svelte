@@ -2,7 +2,7 @@
 	import { api } from '$lib/api/client';
 	import { showToast } from '$lib/stores/ui';
 	import { Section, Button, FormField } from '$lib/components/ui';
-	import { getPsetTargets } from '$lib/utils';
+	import { getPsetTargets, formatErrorMessage, validateRange } from '$lib/utils';
 	import type { Pset } from '$lib/types';
 
 	interface Props {
@@ -17,12 +17,44 @@
 		torque: 12.5,
 		angle: 40.0
 	});
+	let isSubmitting = $state(false);
+	let validationErrors = $state({
+		torque: '',
+		angle: ''
+	});
 
 	const currentPsetTargets = $derived(
 		currentPset ? getPsetTargets(currentPset) : null
 	);
 
+	const isFormValid = $derived(
+		usePsetValues || (!validationErrors.torque && !validationErrors.angle)
+	);
+
+	// Real-time validation using $effect
+	$effect(() => {
+		if (!usePsetValues) {
+			validationErrors.torque = validateRange(
+				tighteningPayload.torque,
+				0,
+				100,
+				'Torque'
+			);
+			validationErrors.angle = validateRange(
+				tighteningPayload.angle,
+				0,
+				360,
+				'Angle'
+			);
+		} else {
+			// Clear errors when using PSET values
+			validationErrors.torque = '';
+			validationErrors.angle = '';
+		}
+	});
+
 	async function handleSubmit() {
+		isSubmitting = true;
 		try {
 			let payload: any = {};
 
@@ -38,7 +70,9 @@
 			await api.simulateTightening(payload);
 			showToast({ type: 'success', message: 'Tightening simulated!' });
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('simulate tightening', error) });
+		} finally {
+			isSubmitting = false;
 		}
 	}
 </script>
@@ -120,6 +154,7 @@
 					step="0.1"
 					min={0}
 					max={100}
+					error={validationErrors.torque}
 				/>
 				<FormField
 					label="Angle (degrees)"
@@ -128,6 +163,7 @@
 					step="0.1"
 					min={0}
 					max={360}
+					error={validationErrors.angle}
 				/>
 			</div>
 
@@ -143,8 +179,8 @@
 			/>
 		{/if}
 
-		<Button type="submit" class="w-full sm:w-auto">
-			Simulate Tightening
+		<Button type="submit" disabled={isSubmitting || !isFormValid} class="w-full sm:w-auto">
+			{isSubmitting ? 'Simulating...' : 'Simulate Tightening'}
 		</Button>
 	</form>
 </Section>

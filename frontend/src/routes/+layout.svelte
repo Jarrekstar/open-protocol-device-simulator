@@ -4,6 +4,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { connectWebSocket, disconnectWebSocket } from '$lib/stores/websocket';
 	import { Navigation, ThemeToggle, ConnectionStatus } from '$lib/components/layout';
+	import { ToastContainer } from '$lib/components/ui';
 
 	onMount(() => {
 		connectWebSocket();
@@ -35,3 +36,5 @@
 		<slot />
 	</div>
 </AppShell>
+
+<ToastContainer />

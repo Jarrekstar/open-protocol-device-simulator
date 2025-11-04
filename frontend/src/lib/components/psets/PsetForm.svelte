@@ -46,7 +46,7 @@
 		e.preventDefault();
 		handleSubmit();
 	}}
-	class="space-y-5"
+	class="space-y-6"
 >
 	<FormField
 		label="Name"

@@ -3,7 +3,7 @@
 	import { showToast } from '$lib/stores/ui';
 	import { deviceState } from '$lib/stores/device';
 	import { Section, Button, FormField } from '$lib/components/ui';
-	import { toPercentage, toRate } from '$lib/utils';
+	import { toPercentage, toRate, formatErrorMessage } from '$lib/utils';
 	import { onMount } from 'svelte';
 
 	let config = $state({
@@ -17,6 +17,8 @@
 	});
 
 	let showAdvanced = $state(false);
+	let isUpdatingHealth = $state(false);
+	let isUpdatingAdvanced = $state(false);
 
 	// Compute connection status based on health
 	const connectionStatus = $derived((() => {
@@ -38,6 +40,7 @@
 	})());
 
 	async function handleUpdateHealth() {
+		isUpdatingHealth = true;
 		try {
 			const response = await api.updateFailureConfig({
 				connection_health: config.connection_health
@@ -62,11 +65,14 @@
 			const state = await api.getDeviceState();
 			deviceState.set(state);
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('update failure configuration', error) });
+		} finally {
+			isUpdatingHealth = false;
 		}
 	}
 
 	async function handleUpdateAdvanced() {
+		isUpdatingAdvanced = true;
 		try {
 			const response = await api.updateFailureConfig({
 				enabled: config.enabled,
@@ -92,7 +98,9 @@
 				force_disconnect_rate: toPercentage(response.config.force_disconnect_rate)
 			};
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('update advanced failure configuration', error) });
+		} finally {
+			isUpdatingAdvanced = false;
 		}
 	}
 
@@ -146,6 +154,7 @@
 	<!-- Connection Health Slider -->
 	<div class="space-y-3">
 		<label
+			for="connection-health-slider"
 			class="flex items-center justify-between text-sm font-semibold text-surface-600-300-token"
 		>
 			<span>Connection Health</span>
@@ -158,6 +167,7 @@
 				>0%</span
 			>
 			<input
+				id="connection-health-slider"
 				type="range"
 				class="flex-1 {sliderColor}"
 				bind:value={config.connection_health}
@@ -178,8 +188,8 @@
 			<span class="text-right">Perfect</span>
 		</div>
 		<div class="flex justify-end">
-			<Button variant="ghost-surface" onclick={handleReset} class="btn-sm">
-				Reset to 100%
+			<Button variant="ghost-surface" onclick={handleReset} disabled={isUpdatingHealth} class="btn-sm">
+				{isUpdatingHealth ? 'Resetting...' : 'Reset to 100%'}
 			</Button>
 		</div>
 	</div>
@@ -287,8 +297,8 @@
 				step={0.1}
 			/>
 
-			<Button onclick={handleUpdateAdvanced} class="w-full sm:w-auto">
-				Apply Advanced Settings
+			<Button onclick={handleUpdateAdvanced} disabled={isUpdatingAdvanced} class="w-full sm:w-auto">
+				{isUpdatingAdvanced ? 'Applying...' : 'Apply Advanced Settings'}
 			</Button>
 		</div>
 	</details>

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { api } from '$lib/api/client';
 	import { deviceState } from '$lib/stores/device';
+	import { showToast } from '$lib/stores/ui';
+	import { formatErrorMessage } from '$lib/utils';
 	import type { Pset } from '$lib/types';
 	import {
 		PsetSelector,
@@ -22,6 +24,7 @@
 			psets = await api.getPsets();
 		} catch (error) {
 			console.error('Failed to load PSETs:', error);
+			showToast({ type: 'error', message: formatErrorMessage('load PSETs', error) });
 		}
 	}
 

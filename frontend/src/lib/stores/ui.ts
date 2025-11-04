@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { TOAST } from '$lib/config/constants';
 
 /**
  * Toast notification interface
@@ -21,7 +22,7 @@ export const toasts = writable<Toast[]>([]);
  */
 export function showToast(toast: Omit<Toast, 'id'>) {
 	const id = crypto.randomUUID();
-	const fullToast: Toast = { id, duration: 3000, ...toast };
+	const fullToast: Toast = { id, duration: TOAST.DEFAULT_DURATION_MS, ...toast };
 
 	toasts.update((list) => [...list, fullToast]);
 
