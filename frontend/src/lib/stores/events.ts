@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { SimulatorEvent } from '$lib/types';
+import { EVENTS } from '$lib/config/constants';
 
 export const events = writable<SimulatorEvent[]>([]);
 export const eventFilter = writable<string>('all');
@@ -8,8 +9,8 @@ export const eventSearchQuery = writable<string>('');
 export function addEvent(event: SimulatorEvent) {
 	events.update((list) => {
 		const updated = [event, ...list];
-		// Keep last 1000 events
-		return updated.slice(0, 1000);
+		// Keep last N events as configured
+		return updated.slice(0, EVENTS.MAX_EVENTS);
 	});
 }
 

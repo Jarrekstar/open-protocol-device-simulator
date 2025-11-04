@@ -3,6 +3,7 @@
 	import { showToast } from '$lib/stores/ui';
 	import { deviceState } from '$lib/stores/device';
 	import { Section, Button, FormField } from '$lib/components/ui';
+	import { formatErrorMessage } from '$lib/utils';
 	import { onMount } from 'svelte';
 
 	let config = $state({
@@ -10,8 +11,10 @@
 		spindle_count: 4,
 		sync_id: 1
 	});
+	let isSaving = $state(false);
 
 	async function handleSubmit() {
+		isSaving = true;
 		try {
 			await api.configureMultiSpindle(config);
 			showToast({
@@ -30,7 +33,9 @@
 				sync_id: state.multi_spindle_config.sync_id
 			};
 		} catch (error) {
-			showToast({ type: 'error', message: `Failed: ${error}` });
+			showToast({ type: 'error', message: formatErrorMessage('configure multi-spindle', error) });
+		} finally {
+			isSaving = false;
 		}
 	}
 
@@ -88,7 +93,7 @@
 		{/if}
 
 		<div class="flex justify-end">
-			<Button type="submit" class="sm:w-auto">
+			<Button type="submit" disabled={isSaving} class="sm:w-auto">
 				Apply Configuration
 			</Button>
 		</div>

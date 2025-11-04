@@ -4,6 +4,7 @@
  */
 
 export * from './conversion';
+export * from './errors';
 export * from './format';
 export * from './pset';
 export * from './validation';

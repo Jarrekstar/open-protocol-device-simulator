@@ -2,13 +2,32 @@ import { writable, get } from 'svelte/store';
 import { deviceState } from './device';
 import { addEvent } from './events';
 import { addTighteningResult, autoTighteningProgress } from './tightening';
-import type { SimulatorEvent } from '$lib/types';
+import { WEBSOCKET } from '$lib/config/constants';
+import type { SimulatorEvent, DeviceState } from '$lib/types';
 
 export const connected = writable(false);
 export const reconnectAttempts = writable(0);
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Type guard to check if data is a DeviceState object
+ * @param data - Data to validate
+ * @returns True if data matches DeviceState structure
+ */
+function isDeviceState(data: any): data is DeviceState {
+	return (
+		typeof data === 'object' &&
+		data !== null &&
+		typeof data.cell_id === 'number' &&
+		typeof data.tool_enabled === 'boolean' &&
+		'tool_state' in data &&
+		'current_pset_id' in data &&
+		'multi_spindle_config' in data &&
+		'vehicle_id_number' in data
+	);
+}
 
 /**
  * Event handler map for routing WebSocket events to appropriate store updates
@@ -71,10 +90,22 @@ const eventHandlers: Record<string, (event: any) => void> = {
 	}
 };
 
+/**
+ * Establishes WebSocket connection with automatic reconnection
+ * Uses exponential backoff with a maximum of 10 attempts
+ * @param url - WebSocket endpoint URL (default: ws://localhost:8081/ws/events)
+ */
 export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') {
-	if (ws?.readyState === WebSocket.OPEN) {
-		console.log('WebSocket already connected');
+	// Prevent multiple instances
+	if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
+		console.log('WebSocket already connected or connecting');
 		return;
+	}
+
+	// Clean up any existing connection
+	if (ws) {
+		ws.close();
+		ws = null;
 	}
 
 	ws = new WebSocket(url);
@@ -90,7 +121,7 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 			const data = JSON.parse(event.data);
 
 			// First message might be DeviceState
-			if ('cell_id' in data && 'tool_enabled' in data) {
+			if (isDeviceState(data)) {
 				deviceState.set(data);
 				return;
 			}
@@ -99,9 +130,10 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 			const simEvent = data as SimulatorEvent;
 
 			// Route event to appropriate handler
-			const handler = eventHandlers[simEvent.type];
-			if (handler) {
-				handler(simEvent);
+			if (simEvent.type && eventHandlers[simEvent.type]) {
+				eventHandlers[simEvent.type](simEvent);
+			} else {
+				console.warn('Unknown event type received:', simEvent.type);
 			}
 		} catch (error) {
 			console.error('Failed to parse WebSocket message:', error);
@@ -118,8 +150,11 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 
 		// Attempt to reconnect
 		const attempts = get(reconnectAttempts);
-		if (attempts < 10) {
-			const delay = Math.min(1000 * Math.pow(2, attempts), 30000); // Exponential backoff, max 30s
+		if (attempts < WEBSOCKET.MAX_RECONNECT_ATTEMPTS) {
+			const delay = Math.min(
+				WEBSOCKET.BASE_RECONNECT_DELAY_MS * Math.pow(2, attempts),
+				WEBSOCKET.MAX_RECONNECT_DELAY_MS
+			);
 			console.log(`Reconnecting in ${delay}ms (attempt ${attempts + 1})`);
 
 			reconnectTimer = setTimeout(() => {
@@ -130,16 +165,29 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 	};
 }
 
+/**
+ * Disconnects the WebSocket and cleans up resources
+ * Cancels any pending reconnection attempts
+ */
 export function disconnectWebSocket() {
+	// Clear reconnection timer
 	if (reconnectTimer) {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
 	}
 
+	// Close and cleanup WebSocket
 	if (ws) {
+		// Remove event listeners to prevent memory leaks
+		ws.onopen = null;
+		ws.onmessage = null;
+		ws.onerror = null;
+		ws.onclose = null;
+
 		ws.close();
 		ws = null;
 	}
 
 	connected.set(false);
+	reconnectAttempts.set(0);
 }

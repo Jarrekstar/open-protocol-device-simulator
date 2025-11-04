@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { TighteningResult } from '$lib/types';
+import { EVENTS } from '$lib/config/constants';
 
 export const latestTighteningResult = writable<TighteningResult | null>(null);
 export const tighteningHistory = writable<TighteningResult[]>([]);
@@ -20,7 +21,7 @@ export function addTighteningResult(result: TighteningResult) {
 	latestTighteningResult.set(result);
 	tighteningHistory.update((list) => {
 		const updated = [result, ...list];
-		return updated.slice(0, 100); // Keep last 100
+		return updated.slice(0, EVENTS.MAX_TIGHTENING_HISTORY);
 	});
 }
 
