@@ -6,5 +6,6 @@
 export * from './conversion';
 export * from './errors';
 export * from './format';
+export * from './logger';
 export * from './pset';
 export * from './validation';

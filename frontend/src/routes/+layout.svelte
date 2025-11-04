@@ -4,7 +4,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { connectWebSocket, disconnectWebSocket } from '$lib/stores/websocket';
 	import { Navigation, ThemeToggle, ConnectionStatus } from '$lib/components/layout';
-	import { ToastContainer } from '$lib/components/ui';
+	import { ToastContainer, ErrorBoundary } from '$lib/components/ui';
 
 	onMount(() => {
 		connectWebSocket();
@@ -15,26 +15,28 @@
 	});
 </script>
 
-<AppShell>
-	<svelte:fragment slot="header">
-		<AppBar>
-			<svelte:fragment slot="lead">
-				<div class="flex items-center gap-3">
-					<img src="/logo.svg" alt="Device Simulator Logo" class="h-10 w-10" />
-					<span class="text-xl uppercase font-medium">Device Simulator</span>
-				</div>
-			</svelte:fragment>
-			<svelte:fragment slot="trail">
-				<Navigation />
-				<ThemeToggle />
-				<ConnectionStatus />
-			</svelte:fragment>
-		</AppBar>
-	</svelte:fragment>
+<ErrorBoundary>
+	<AppShell>
+		<svelte:fragment slot="header">
+			<AppBar>
+				<svelte:fragment slot="lead">
+					<div class="flex items-center gap-3">
+						<img src="/logo.svg" alt="Device Simulator Logo" class="h-10 w-10" />
+						<span class="text-xl uppercase font-medium">Device Simulator</span>
+					</div>
+				</svelte:fragment>
+				<svelte:fragment slot="trail">
+					<Navigation />
+					<ThemeToggle />
+					<ConnectionStatus />
+				</svelte:fragment>
+			</AppBar>
+		</svelte:fragment>
 
-	<div class="container mx-auto p-4">
-		<slot />
-	</div>
-</AppShell>
+		<div class="container mx-auto p-4">
+			<slot />
+		</div>
+	</AppShell>
 
-<ToastContainer />
+	<ToastContainer />
+</ErrorBoundary>
