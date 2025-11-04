@@ -3,6 +3,7 @@ import { deviceState } from './device';
 import { addEvent } from './events';
 import { addTighteningResult, autoTighteningProgress } from './tightening';
 import { WEBSOCKET } from '$lib/config/constants';
+import { logger } from '$lib/utils';
 import type { SimulatorEvent, DeviceState } from '$lib/types';
 
 export const connected = writable(false);
@@ -12,21 +13,32 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * Type guard to check if data is a DeviceState object
+ * Type guard to check if data looks like a DeviceState object from backend
  * @param data - Data to validate
- * @returns True if data matches DeviceState structure
+ * @returns True if data matches backend DeviceState structure
  */
-function isDeviceState(data: any): data is DeviceState {
+function isDeviceState(data: any): boolean {
 	return (
 		typeof data === 'object' &&
 		data !== null &&
 		typeof data.cell_id === 'number' &&
 		typeof data.tool_enabled === 'boolean' &&
-		'tool_state' in data &&
+		'device_fsm_state' in data &&
 		'current_pset_id' in data &&
-		'multi_spindle_config' in data &&
-		'vehicle_id_number' in data
+		'multi_spindle_config' in data
 	);
+}
+
+/**
+ * Maps backend DeviceState to frontend DeviceState interface
+ * Handles field name differences between backend and frontend
+ */
+function mapDeviceState(data: any): DeviceState {
+	return {
+		...data,
+		tool_state: data.device_fsm_state, // Backend sends device_fsm_state, map to tool_state
+		vehicle_id_number: data.vehicle_id ?? null // Backend sends vehicle_id, map to vehicle_id_number
+	};
 }
 
 /**
@@ -98,7 +110,7 @@ const eventHandlers: Record<string, (event: any) => void> = {
 export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') {
 	// Prevent multiple instances
 	if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
-		console.log('WebSocket already connected or connecting');
+		logger.info('WebSocket already connected or connecting');
 		return;
 	}
 
@@ -111,7 +123,7 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 	ws = new WebSocket(url);
 
 	ws.onopen = () => {
-		console.log('WebSocket connected');
+		logger.info('WebSocket connected');
 		connected.set(true);
 		reconnectAttempts.set(0);
 	};
@@ -122,7 +134,7 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 
 			// First message might be DeviceState
 			if (isDeviceState(data)) {
-				deviceState.set(data);
+				deviceState.set(mapDeviceState(data));
 				return;
 			}
 
@@ -133,19 +145,19 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 			if (simEvent.type && eventHandlers[simEvent.type]) {
 				eventHandlers[simEvent.type](simEvent);
 			} else {
-				console.warn('Unknown event type received:', simEvent.type);
+				logger.warn('Unknown event type received:', simEvent.type);
 			}
 		} catch (error) {
-			console.error('Failed to parse WebSocket message:', error);
+			logger.error('Failed to parse WebSocket message:', error);
 		}
 	};
 
 	ws.onerror = (error) => {
-		console.error('WebSocket error:', error);
+		logger.error('WebSocket error:', error);
 	};
 
 	ws.onclose = () => {
-		console.log('WebSocket disconnected');
+		logger.info('WebSocket disconnected');
 		connected.set(false);
 
 		// Attempt to reconnect
@@ -155,7 +167,7 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 				WEBSOCKET.BASE_RECONNECT_DELAY_MS * Math.pow(2, attempts),
 				WEBSOCKET.MAX_RECONNECT_DELAY_MS
 			);
-			console.log(`Reconnecting in ${delay}ms (attempt ${attempts + 1})`);
+			logger.info(`Reconnecting in ${delay}ms (attempt ${attempts + 1})`);
 
 			reconnectTimer = setTimeout(() => {
 				reconnectAttempts.update((n) => n + 1);
