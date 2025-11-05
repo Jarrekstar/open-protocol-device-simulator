@@ -10,7 +10,6 @@ export interface DeviceState {
 	current_pset_name: string | null;
 	multi_spindle_config: MultiSpindleConfig;
 	failure_config: FailureConfig;
-	device_fsm_state: string;
 }
 
 export interface MultiSpindleConfig {

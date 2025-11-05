@@ -4,7 +4,7 @@ import { addEvent } from './events';
 import { addTighteningResult, autoTighteningProgress } from './tightening';
 import { WEBSOCKET } from '$lib/config/constants';
 import { logger } from '$lib/utils';
-import type { SimulatorEvent, DeviceState } from '$lib/types';
+import type { SimulatorEvent, DeviceState, MultiSpindleConfig, FailureConfig } from '$lib/types';
 
 export const connected = writable(false);
 export const reconnectAttempts = writable(0);
@@ -13,16 +13,38 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * Backend DeviceState interface matches what the API sends
+ * Field names differ from frontend DeviceState interface
+ */
+interface BackendDeviceState {
+	cell_id: number;
+	channel_id: number;
+	controller_name: string;
+	supplier_code: string;
+	tool_enabled: boolean;
+	device_fsm_state: string; // Maps to tool_state in frontend
+	vehicle_id: string | null; // Maps to vehicle_id_number in frontend
+	current_job_id: number | null;
+	current_pset_id: number | null;
+	current_pset_name: string | null;
+	multi_spindle_config: MultiSpindleConfig;
+	failure_config: FailureConfig;
+	tightening_tracker?: unknown;
+}
+
+/**
  * Type guard to check if data looks like a DeviceState object from backend
  * @param data - Data to validate
  * @returns True if data matches backend DeviceState structure
  */
-function isDeviceState(data: any): boolean {
+function isDeviceState(data: unknown): data is BackendDeviceState {
 	return (
 		typeof data === 'object' &&
 		data !== null &&
-		typeof data.cell_id === 'number' &&
-		typeof data.tool_enabled === 'boolean' &&
+		'cell_id' in data &&
+		typeof (data as BackendDeviceState).cell_id === 'number' &&
+		'tool_enabled' in data &&
+		typeof (data as BackendDeviceState).tool_enabled === 'boolean' &&
 		'device_fsm_state' in data &&
 		'current_pset_id' in data &&
 		'multi_spindle_config' in data
@@ -33,23 +55,39 @@ function isDeviceState(data: any): boolean {
  * Maps backend DeviceState to frontend DeviceState interface
  * Handles field name differences between backend and frontend
  */
-function mapDeviceState(data: any): DeviceState {
+function mapDeviceState(data: BackendDeviceState): DeviceState {
 	return {
-		...data,
+		cell_id: data.cell_id,
+		channel_id: data.channel_id,
+		controller_name: data.controller_name,
+		tool_enabled: data.tool_enabled,
 		tool_state: data.device_fsm_state, // Backend sends device_fsm_state, map to tool_state
-		vehicle_id_number: data.vehicle_id ?? null // Backend sends vehicle_id, map to vehicle_id_number
+		vehicle_id_number: data.vehicle_id ?? null, // Backend sends vehicle_id, map to vehicle_id_number
+		current_job_id: data.current_job_id,
+		current_pset_id: data.current_pset_id,
+		current_pset_name: data.current_pset_name,
+		multi_spindle_config: data.multi_spindle_config,
+		failure_config: data.failure_config
 	};
 }
 
 /**
- * Event handler map for routing WebSocket events to appropriate store updates
+ * Type utility for creating a fully-typed event handler map
+ * Each handler receives the exact event variant for its type key
  */
-const eventHandlers: Record<string, (event: any) => void> = {
+type EventHandlerMap = {
+	[K in SimulatorEvent['type']]: (event: Extract<SimulatorEvent, { type: K }>) => void;
+};
+
+/**
+ * Event handler map with automatic type narrowing
+ * TypeScript enforces that all event types are handled
+ */
+const eventHandlers: EventHandlerMap = {
 	TighteningCompleted: (event) => {
 		addTighteningResult(event.result);
 		addEvent(event);
 	},
-
 	ToolStateChanged: (event) => {
 		deviceState.update((state) => {
 			if (state) {
@@ -59,7 +97,6 @@ const eventHandlers: Record<string, (event: any) => void> = {
 		});
 		addEvent(event);
 	},
-
 	AutoTighteningProgress: (event) => {
 		autoTighteningProgress.set({
 			counter: event.counter,
@@ -67,7 +104,6 @@ const eventHandlers: Record<string, (event: any) => void> = {
 			running: event.running
 		});
 	},
-
 	PsetChanged: (event) => {
 		deviceState.update((state) => {
 			if (state) {
@@ -78,7 +114,6 @@ const eventHandlers: Record<string, (event: any) => void> = {
 		});
 		addEvent(event);
 	},
-
 	VehicleIdChanged: (event) => {
 		deviceState.update((state) => {
 			if (state) {
@@ -88,19 +123,16 @@ const eventHandlers: Record<string, (event: any) => void> = {
 		});
 		addEvent(event);
 	},
-
 	MultiSpindleResultCompleted: (event) => {
 		addEvent(event);
 	},
-
 	MultiSpindleStatusCompleted: (event) => {
 		addEvent(event);
 	},
-
 	BatchCompleted: (event) => {
 		addEvent(event);
 	}
-};
+}
 
 /**
  * Establishes WebSocket connection with automatic reconnection
@@ -141,11 +173,13 @@ export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') 
 			// Otherwise it's a SimulatorEvent
 			const simEvent = data as SimulatorEvent;
 
-			// Route event to appropriate handler
-			if (simEvent.type && eventHandlers[simEvent.type]) {
-				eventHandlers[simEvent.type](simEvent);
+			// Route event to appropriate handler using handler map
+			const handler = eventHandlers[simEvent.type];
+			if (handler) {
+				// Type assertion required due to TypeScript limitation with correlated union types
+				(handler as (event: SimulatorEvent) => void)(simEvent);
 			} else {
-				logger.warn('Unknown event type received:', simEvent.type);
+				logger.warn('Unknown event type received:', simEvent);
 			}
 		} catch (error) {
 			logger.error('Failed to parse WebSocket message:', error);

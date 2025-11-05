@@ -3,7 +3,7 @@
 	import { showToast } from '$lib/stores/ui';
 	import { Section, Button, FormField } from '$lib/components/ui';
 	import { getPsetTargets, formatErrorMessage, validateRange } from '$lib/utils';
-	import type { Pset } from '$lib/types';
+	import type { Pset, TighteningRequest } from '$lib/types';
 
 	interface Props {
 		currentPset: Pset | undefined;
@@ -56,7 +56,7 @@
 	async function handleSubmit() {
 		isSubmitting = true;
 		try {
-			let payload: any = {};
+			let payload: TighteningRequest = {};
 
 			if (!usePsetValues) {
 				payload.torque = tighteningPayload.torque;

@@ -10,30 +10,23 @@
 		duration_ms: 500,
 		failure_rate: 0.0
 	});
-	let isStarting = $state(false);
-	let isStopping = $state(false);
+	let isLoading = $state(false);
 
-	async function handleStart() {
-		isStarting = true;
+	async function handleToggle() {
+		isLoading = true;
 		try {
-			await api.startAutoTightening(config);
-			showToast({ type: 'success', message: 'Auto-tightening started!' });
+			if ($autoTighteningProgress.running) {
+				await api.stopAutoTightening();
+				showToast({ type: 'success', message: 'Auto-tightening stopped!' });
+			} else {
+				await api.startAutoTightening(config);
+				showToast({ type: 'success', message: 'Auto-tightening started!' });
+			}
 		} catch (error) {
-			showToast({ type: 'error', message: formatErrorMessage('start auto-tightening', error) });
+			const action = $autoTighteningProgress.running ? 'stop' : 'start';
+			showToast({ type: 'error', message: formatErrorMessage(`${action} auto-tightening`, error) });
 		} finally {
-			isStarting = false;
-		}
-	}
-
-	async function handleStop() {
-		isStopping = true;
-		try {
-			await api.stopAutoTightening();
-			showToast({ type: 'success', message: 'Auto-tightening stopped!' });
-		} catch (error) {
-			showToast({ type: 'error', message: formatErrorMessage('stop auto-tightening', error) });
-		} finally {
-			isStopping = false;
+			isLoading = false;
 		}
 	}
 </script>
@@ -73,7 +66,7 @@
 	<form
 		onsubmit={(e) => {
 			e.preventDefault();
-			handleStart();
+			handleToggle();
 		}}
 		class="space-y-6"
 	>
@@ -102,12 +95,18 @@
 			/>
 		</div>
 
-		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-			<Button type="submit" disabled={isStarting} class="sm:w-auto">
-				{isStarting ? 'Starting...' : 'Start'}
-			</Button>
-			<Button variant="filled-error" type="button" onclick={handleStop} disabled={isStopping} class="sm:w-auto">
-				{isStopping ? 'Stopping...' : 'Stop'}
+		<div class="flex justify-end">
+			<Button
+				type="submit"
+				variant={$autoTighteningProgress.running ? 'filled-error' : 'filled-primary'}
+				disabled={isLoading}
+				class="sm:w-auto"
+			>
+				{#if isLoading}
+					{$autoTighteningProgress.running ? 'Stopping...' : 'Starting...'}
+				{:else}
+					{$autoTighteningProgress.running ? 'Stop Auto-Tightening' : 'Start Auto-Tightening'}
+				{/if}
 			</Button>
 		</div>
 	</form>

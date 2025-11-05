@@ -18,7 +18,11 @@ export function getErrorMessage(error: unknown): string {
 	}
 
 	if (error && typeof error === 'object' && 'message' in error) {
-		return String((error as any).message);
+		const message = (error as Record<string, unknown>).message;
+		if (typeof message === 'string') {
+			return message;
+		}
+		return String(message);
 	}
 
 	return 'An unexpected error occurred. Please try again.';
