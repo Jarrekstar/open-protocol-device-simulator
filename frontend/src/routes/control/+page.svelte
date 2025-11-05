@@ -2,7 +2,7 @@
 	import { api } from '$lib/api/client';
 	import { deviceState } from '$lib/stores/device';
 	import { showToast } from '$lib/stores/ui';
-	import { formatErrorMessage } from '$lib/utils';
+	import { formatErrorMessage, logger } from '$lib/utils';
 	import type { Pset } from '$lib/types';
 	import {
 		PsetSelector,
@@ -23,7 +23,7 @@
 		try {
 			psets = await api.getPsets();
 		} catch (error) {
-			console.error('Failed to load PSETs:', error);
+			logger.error('Failed to load PSETs:', error);
 			showToast({ type: 'error', message: formatErrorMessage('load PSETs', error) });
 		}
 	}

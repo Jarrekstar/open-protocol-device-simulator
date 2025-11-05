@@ -8,7 +8,7 @@
  * @param fieldName - The name of the field for error message
  * @returns Error message if invalid, empty string if valid
  */
-export function validateRequired(value: any, fieldName: string): string {
+export function validateRequired(value: unknown, fieldName: string): string {
 	if (value === undefined || value === null || value === '') {
 		return `${fieldName} is required`;
 	}
