@@ -972,32 +972,67 @@ async fn handle_websocket(socket: WebSocket, server_state: ServerState) {
         let _ = sender.send(Message::Text(json.into())).await;
     }
 
-    // Spawn task to receive messages from client (ping/pong)
+    // Clone sender for recv_task (need to share between tasks)
+    let (pong_tx, mut pong_rx) = tokio::sync::mpsc::channel::<String>(10);
+
+    // Spawn task to receive messages from client (handle ping/pong)
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
-            // Handle ping/pong and close messages
-            if matches!(msg, Message::Close(_)) {
-                break;
+            match msg {
+                Message::Text(text) => {
+                    // Try to parse as JSON to check if it's a ping message
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if value.get("type").and_then(|t| t.as_str()) == Some("ping") {
+                            // Send pong response
+                            let pong_msg = r#"{"type":"pong"}"#.to_string();
+                            let _ = pong_tx.send(pong_msg).await;
+                        }
+                    }
+                }
+                Message::Close(_) => {
+                    break;
+                }
+                _ => {}
             }
         }
     });
 
-    // Main task: forward events from broadcaster to WebSocket
+    // Main task: forward events from broadcaster to WebSocket and handle pong responses
     let mut send_task = tokio::spawn(async move {
-        while let Ok(event) = event_rx.recv().await {
-            // Serialize event to JSON
-            let json = match serde_json::to_string(&event) {
-                Ok(j) => j,
-                Err(e) => {
-                    eprintln!("Failed to serialize event: {}", e);
-                    continue;
-                }
-            };
+        loop {
+            tokio::select! {
+                // Handle incoming events from broadcaster
+                result = event_rx.recv() => {
+                    match result {
+                        Ok(event) => {
+                            // Serialize event to JSON
+                            let json = match serde_json::to_string(&event) {
+                                Ok(j) => j,
+                                Err(e) => {
+                                    eprintln!("Failed to serialize event: {}", e);
+                                    continue;
+                                }
+                            };
 
-            // Send to WebSocket client
-            if sender.send(Message::Text(json.into())).await.is_err() {
-                // Client disconnected
-                break;
+                            // Send to WebSocket client
+                            if sender.send(Message::Text(json.into())).await.is_err() {
+                                // Client disconnected
+                                break;
+                            }
+                        }
+                        Err(_) => {
+                            // Channel closed
+                            break;
+                        }
+                    }
+                }
+                // Handle pong responses from recv_task
+                Some(pong_msg) = pong_rx.recv() => {
+                    if sender.send(Message::Text(pong_msg.into())).await.is_err() {
+                        // Client disconnected
+                        break;
+                    }
+                }
             }
         }
     });

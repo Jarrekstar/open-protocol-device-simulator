@@ -3,9 +3,11 @@
 	import { api } from '$lib/api/client';
 	import { showToast } from '$lib/stores/ui';
 	import { formatErrorMessage } from '$lib/utils';
-	import { Button, Card } from '$lib/components/ui';
+	import { Button } from '$lib/components/ui';
 	import { PsetModal, PsetCard } from '$lib/components/psets';
 	import type { Pset } from '$lib/types';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import LoadingSkeleton from '$lib/components/ui/LoadingSkeleton.svelte';
 
 	let psets: Pset[] = $state([]);
 	let loading = $state(true);
@@ -13,6 +15,18 @@
 	let modalMode: 'create' | 'edit' = $state('create');
 	let editingPset: Pset | null = $state(null);
 	let deleteConfirmId: number | null = $state(null);
+	let searchQuery = $state('');
+
+	const filteredPsets = $derived.by(() => {
+		if (!searchQuery.trim()) return psets;
+		const query = searchQuery.toLowerCase();
+		return psets.filter(
+			(p) =>
+				p.name.toLowerCase().includes(query) ||
+				p.description?.toLowerCase().includes(query) ||
+				p.id.toString().includes(query)
+		);
+	});
 
 	async function loadPsets() {
 		try {
@@ -95,43 +109,100 @@
 	<title>PSET Management - Device Simulator</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl space-y-6">
-	<header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+<div class="space-y-6 animate-fade-in">
+	<!-- Header -->
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div>
-			<h1 class="h1">Parameter Sets (PSETs)</h1>
-			<p class="text-sm opacity-70">
-				Manage reusable torque and angle presets for quick selection.
+			<h1 class="text-3xl font-semibold text-surface-900 dark:text-surface-100">
+				Parameter Sets
+			</h1>
+			<p class="text-sm text-surface-600 dark:text-surface-400 mt-1">
+				Reusable torque and angle configurations for tightening operations
 			</p>
 		</div>
-		<Button onclick={openCreateModal} class="sm:w-auto">
-			<span>+ Create New PSET</span>
+		<Button onclick={openCreateModal} variant="filled-primary">
+			<span>+ Create PSET</span>
 		</Button>
-	</header>
+	</div>
 
+	<!-- Search & Filters -->
+	{#if psets.length > 0}
+		<div class="relative">
+			<svg
+				class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+			>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+				/>
+			</svg>
+			<input
+				type="search"
+				class="input !pl-11 w-full max-w-md"
+				placeholder="Search PSETs by name, ID, or description..."
+				bind:value={searchQuery}
+			/>
+		</div>
+	{/if}
+
+	<!-- PSET Grid -->
 	{#if loading}
-		<div class="flex h-64 items-center justify-center">
-			<div class="text-lg text-surface-500">Loading PSETs...</div>
+		<div class="grid auto-rows-fr grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+			{#each Array(6) as _, i (i)}
+				<div class="card p-6">
+					<LoadingSkeleton variant="rectangular" height="200px" />
+				</div>
+			{/each}
 		</div>
 	{:else if psets.length === 0}
-		<Card padding="lg" class="text-center">
-			<p class="text-lg text-surface-600-300-token">No PSETs available yet.</p>
-			<p class="mt-2 text-sm opacity-70">
-				Create one to define tightening targets for your scenarios.
-			</p>
-			<Button onclick={openCreateModal} class="mt-4">
-				Create Your First PSET
-			</Button>
-		</Card>
+		<EmptyState
+			title="No PSETs Created Yet"
+			description="Parameter Sets allow you to define reusable tightening configurations with specific torque and angle ranges."
+			icon="⚙️"
+		>
+			{#snippet action()}
+				<Button onclick={openCreateModal} variant="filled-primary">
+					Create Your First PSET
+				</Button>
+			{/snippet}
+		</EmptyState>
+	{:else if filteredPsets.length === 0}
+		<EmptyState
+			title="No PSETs Match Your Search"
+			description='Try adjusting your search query or clear it to see all PSETs.'
+			icon="🔍"
+		>
+			{#snippet action()}
+				<Button onclick={() => (searchQuery = '')} variant="filled-primary"> Clear Search </Button>
+			{/snippet}
+		</EmptyState>
 	{:else}
-		<div class="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-			{#each psets as pset (pset.id)}
-				<PsetCard
-					{pset}
-					onEdit={openEditModal}
-					onDelete={handleDelete}
-					{deleteConfirmId}
-					onToggleDeleteConfirm={(id) => (deleteConfirmId = id)}
-				/>
+		<!-- PSET Count -->
+		<div class="flex items-center justify-between">
+			<p class="text-sm text-surface-600 dark:text-surface-400">
+				{filteredPsets.length === psets.length
+					? `${psets.length} ${psets.length === 1 ? 'PSET' : 'PSETs'}`
+					: `Showing ${filteredPsets.length} of ${psets.length} PSETs`}
+			</p>
+		</div>
+
+		<!-- Grid -->
+		<div class="grid auto-rows-fr grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+			{#each filteredPsets as pset, i (pset.id)}
+				<div class="animate-slide-up" style="animation-delay: {i * 0.05}s">
+					<PsetCard
+						{pset}
+						onEdit={openEditModal}
+						onDelete={handleDelete}
+						{deleteConfirmId}
+						onToggleDeleteConfirm={(id) => (deleteConfirmId = id)}
+					/>
+				</div>
 			{/each}
 		</div>
 	{/if}
