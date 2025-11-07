@@ -51,30 +51,46 @@ body {
 	background: transparent !important;
 }
 
-/* Card styling with gradient */
+/* Card styling with gradient and enhanced interactions */
 .card {
 	background: linear-gradient(180deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 100%);
 	border: 1px solid rgb(var(--color-surface-300));
 	box-shadow: 0 2px 8px rgb(var(--color-primary-500) / 0.08);
-	transition: all 0.3s ease;
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+	            box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+	            border-color 0.2s ease;
 }
 
 .card:hover {
 	box-shadow: 0 4px 16px rgb(var(--color-primary-500) / 0.15);
+	transform: translateY(-2px);
+	border-color: rgb(var(--color-surface-400));
 }
 
-/* Primary buttons - Orange */
+.card:active {
+	transform: translateY(0);
+}
+
+/* Primary buttons - Orange with enhanced micro-interactions */
 .btn.variant-filled-primary {
 	background: linear-gradient(135deg, rgb(var(--color-primary-400)) 0%, rgb(var(--color-primary-500)) 100%);
 	border: none;
 	color: white;
 	font-weight: 600;
-	transition: all 0.3s ease;
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+	            box-shadow 0.3s ease,
+	            background 0.2s ease;
 }
 
 .btn.variant-filled-primary:hover {
 	background: linear-gradient(135deg, rgb(var(--color-primary-300)) 0%, rgb(var(--color-primary-400)) 100%);
 	box-shadow: 0 4px 12px rgb(var(--color-primary-500) / 0.3);
+	transform: translateY(-1px);
+}
+
+.btn.variant-filled-primary:active {
+	transform: translateY(0) scale(0.98);
+	box-shadow: 0 2px 6px rgb(var(--color-primary-500) / 0.2);
 }
 
 .btn.variant-filled-secondary {
@@ -115,7 +131,10 @@ body {
 .textarea,
 .select,
 select {
-	padding: 0.75rem 1rem !important;
+	padding-top: 0.75rem;
+	padding-bottom: 0.75rem;
+	padding-left: 1rem;
+	padding-right: 1rem;
 	border: 2px solid rgb(var(--color-surface-300));
 	border-radius: 8px;
 	background: rgb(var(--color-surface-50));
@@ -135,8 +154,8 @@ select:focus {
 
 /* Special handling for number inputs */
 input[type='number'] {
-	padding-left: 1rem !important;
-	padding-right: 1rem !important;
+	padding-left: 1rem;
+	padding-right: 1rem;
 }
 
 /* Checkbox styling */
@@ -174,15 +193,15 @@ input[type='checkbox'] {
 }
 
 /* ========================================
-   DARK MODE (Dark Green Theme)
+   DARK MODE (Slate & Orange Theme)
    ======================================== */
 
 .dark body {
 	background:
-		radial-gradient(ellipse at 0% 0%, rgb(var(--color-surface-400) / 0.35) 0%, transparent 50%),
-		radial-gradient(ellipse at 100% 0%, rgb(var(--color-surface-500) / 0.25) 0%, transparent 50%),
-		radial-gradient(ellipse at 0% 100%, rgb(var(--color-surface-600) / 0.3) 0%, transparent 45%),
-		radial-gradient(ellipse at 100% 100%, rgb(var(--color-surface-500) / 0.3) 0%, transparent 45%),
+		radial-gradient(ellipse at 0% 0%, rgb(var(--color-primary-500) / 0.15) 0%, transparent 50%),
+		radial-gradient(ellipse at 100% 0%, rgb(var(--color-tertiary-500) / 0.08) 0%, transparent 50%),
+		radial-gradient(ellipse at 0% 100%, rgb(var(--color-primary-600) / 0.12) 0%, transparent 45%),
+		radial-gradient(ellipse at 100% 100%, rgb(var(--color-tertiary-600) / 0.08) 0%, transparent 45%),
 		linear-gradient(180deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 30%, rgb(var(--color-surface-50)) 100%) !important;
 	min-height: 100vh;
 	color: rgb(var(--on-surface));
@@ -191,34 +210,36 @@ input[type='checkbox'] {
 .dark .card {
 	background: linear-gradient(135deg, rgb(var(--color-surface-200)) 0%, rgb(var(--color-surface-100)) 100%);
 	border: 1px solid rgb(var(--color-surface-300));
-	box-shadow: 0 2px 8px rgb(var(--color-surface-400) / 0.2);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
 	transition: all 0.3s ease;
 }
 
 .dark .card:hover {
-	box-shadow: 0 4px 16px rgb(var(--color-surface-500) / 0.25), 0 0 20px rgb(var(--color-surface-600) / 0.15);
-	border-color: rgb(var(--color-surface-500));
+	box-shadow: 0 4px 16px rgb(0 0 0 / 0.4), 0 0 20px rgb(var(--color-primary-500) / 0.1);
+	border-color: rgb(var(--color-surface-400));
+	transform: translateY(-2px);
 }
 
-/* Primary buttons - Muted dark green */
+/* Primary buttons - Vibrant orange for dark mode */
 .dark .btn.variant-filled-primary {
-	background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%);
+	background: linear-gradient(135deg, rgb(var(--color-primary-500)) 0%, rgb(var(--color-primary-600)) 100%);
 	color: white;
 	font-weight: 600;
 }
 
 .dark .btn.variant-filled-primary:hover {
-	background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%);
-	box-shadow: 0 4px 12px rgb(var(--color-surface-600) / 0.4);
+	background: linear-gradient(135deg, rgb(var(--color-primary-400)) 0%, rgb(var(--color-primary-500)) 100%);
+	box-shadow: 0 4px 12px rgb(var(--color-primary-500) / 0.4);
 }
 
 .dark .btn.variant-filled-secondary {
-	background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%);
+	background: linear-gradient(135deg, rgb(var(--color-secondary-500)) 0%, rgb(var(--color-secondary-600)) 100%);
 	font-weight: 500;
+	color: white;
 }
 
 .dark .btn.variant-filled-secondary:hover {
-	background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%);
+	background: linear-gradient(135deg, rgb(var(--color-secondary-400)) 0%, rgb(var(--color-secondary-500)) 100%);
 }
 
 .dark .btn.variant-filled-error {
@@ -248,7 +269,10 @@ input[type='checkbox'] {
 .dark .textarea,
 .dark .select,
 .dark select {
-	padding: 0.75rem 1rem !important;
+	padding-top: 0.75rem;
+	padding-bottom: 0.75rem;
+	padding-left: 1rem;
+	padding-right: 1rem;
 	border: 2px solid rgb(var(--color-surface-300));
 	border-radius: 8px;
 	background: rgb(var(--color-surface-100));
@@ -307,11 +331,27 @@ input[type='checkbox'] {
 
 /* Text colors - dark mode */
 .dark .text-surface-500 {
-	color: rgb(var(--on-surface) / 0.6) !important;
+	color: rgb(255 255 255 / 0.7) !important;
+}
+
+.dark .text-surface-600 {
+	color: rgb(255 255 255 / 0.8) !important;
+}
+
+.dark .text-surface-400 {
+	color: rgb(255 255 255 / 0.6) !important;
 }
 
 .dark .text-surface-600-300-token {
-	color: rgb(var(--on-surface) / 0.6) !important;
+	color: rgb(255 255 255 / 0.8) !important;
+}
+
+.dark .text-surface-900 {
+	color: rgb(255 255 255) !important;
+}
+
+.dark .text-surface-800 {
+	color: rgb(255 255 255 / 0.95) !important;
 }
 
 /* ========================================
@@ -366,7 +406,7 @@ input[type='checkbox'] {
 .dark .app-bar.bg-surface-100-800-token {
 	background: rgb(var(--color-surface-200) / 0.3) !important;
 	border-bottom: 1px solid rgb(var(--color-surface-500) / 0.3) !important;
-	color: rgb(var(--color-surface-800)) !important;
+	color: rgb(255 255 255) !important;
 }
 
 /* Fix AppBar button colors in dark mode */
@@ -381,11 +421,263 @@ input[type='checkbox'] {
 }
 
 .dark .app-bar .btn.variant-filled-primary {
-	background: linear-gradient(135deg, rgb(var(--color-surface-600)) 0%, rgb(var(--color-surface-500)) 100%) !important;
+	background: linear-gradient(135deg, rgb(var(--color-primary-500)) 0%, rgb(var(--color-primary-600)) 100%) !important;
 	border: none !important;
 	color: white !important;
 }
 
 .dark .app-bar .btn.variant-filled-primary:hover {
-	background: linear-gradient(135deg, rgb(var(--color-surface-700)) 0%, rgb(var(--color-surface-600)) 100%) !important;
+	background: linear-gradient(135deg, rgb(var(--color-primary-400)) 0%, rgb(var(--color-primary-500)) 100%) !important;
+	box-shadow: 0 4px 12px rgb(var(--color-primary-500) / 0.4) !important;
 }
+
+/* ========================================
+   Loading States & Skeletons
+   ======================================== */
+
+.loading-skeleton {
+	background: linear-gradient(
+		90deg,
+		rgb(var(--color-surface-200)) 0%,
+		rgb(var(--color-surface-300)) 50%,
+		rgb(var(--color-surface-200)) 100%
+	);
+	background-size: 200% 100%;
+	animation: shimmer 2s linear infinite;
+	border-radius: 6px;
+}
+
+.dark .loading-skeleton {
+	background: linear-gradient(
+		90deg,
+		rgb(var(--color-surface-200)) 0%,
+		rgb(var(--color-surface-300)) 50%,
+		rgb(var(--color-surface-200)) 100%
+	);
+}
+
+/* Button loading state */
+.btn.loading {
+	position: relative;
+	color: transparent !important;
+	pointer-events: none;
+}
+
+.btn.loading::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 1.2rem;
+	height: 1.2rem;
+	border: 2px solid white;
+	border-radius: 50%;
+	border-top-color: transparent;
+	animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+	to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ========================================
+   Enhanced Focus States
+   ======================================== */
+
+button:focus-visible,
+a:focus-visible,
+.btn:focus-visible {
+	outline: 2px solid rgb(var(--color-primary-400));
+	outline-offset: 2px;
+	transition: outline-offset 0.2s ease;
+}
+
+.dark button:focus-visible,
+.dark a:focus-visible,
+.dark .btn:focus-visible {
+	outline-color: rgb(var(--color-surface-600));
+}
+
+/* ========================================
+   Utility Classes
+   ======================================== */
+
+/* Smooth transitions */
+.transition-smooth {
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover lift effect */
+.hover-lift {
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+	            box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+	transform: translateY(-2px);
+}
+
+/* Glassmorphism effect */
+.glass {
+	background: rgb(var(--color-surface-100) / 0.7);
+	backdrop-filter: blur(12px);
+	border: 1px solid rgb(var(--color-surface-300) / 0.5);
+}
+
+.dark .glass {
+	background: rgb(var(--color-surface-200) / 0.6);
+	border-color: rgb(var(--color-surface-400) / 0.3);
+}
+
+/* Pulse animation for status indicators */
+.pulse-dot {
+	animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+	0%, 100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+/* Gradient text */
+.text-gradient-primary {
+	background: linear-gradient(135deg, rgb(var(--color-primary-400)), rgb(var(--color-primary-600)));
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+/* Divider with fade effect */
+.divider-fade {
+	height: 1px;
+	background: linear-gradient(
+		to right,
+		transparent 0%,
+		rgb(var(--color-surface-400)) 50%,
+		transparent 100%
+	);
+}
+
+.dark .divider-fade {
+	background: linear-gradient(
+		to right,
+		transparent 0%,
+		rgb(var(--color-surface-500)) 50%,
+		transparent 100%
+	);
+}
+
+/* Status badge glow effects */
+.badge-success {
+	box-shadow: 0 0 12px rgb(var(--color-success-500) / 0.3);
+}
+
+.badge-error {
+	box-shadow: 0 0 12px rgb(var(--color-error-500) / 0.3);
+}
+
+.badge-warning {
+	box-shadow: 0 0 12px rgb(var(--color-warning-500) / 0.3);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: rgb(var(--color-surface-100));
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgb(var(--color-surface-400));
+	border-radius: 4px;
+	transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgb(var(--color-surface-500));
+}
+
+.dark ::-webkit-scrollbar-track {
+	background: rgb(var(--color-surface-100));
+}
+
+.dark ::-webkit-scrollbar-thumb {
+	background: rgb(var(--color-surface-400));
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+	background: rgb(var(--color-surface-500));
+}
+
+/* ========================================
+   Data Visualization Helpers
+   ======================================== */
+
+/* Metric card with accent border */
+.metric-card {
+	position: relative;
+	overflow: hidden;
+}
+
+.metric-card::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 4px;
+	height: 100%;
+	background: linear-gradient(180deg, rgb(var(--color-primary-400)), rgb(var(--color-primary-600)));
+	border-radius: 4px 0 0 4px;
+}
+
+/* Trend indicators */
+.trend-up {
+	color: rgb(var(--color-success-600));
+}
+
+.trend-down {
+	color: rgb(var(--color-error-600));
+}
+
+.trend-neutral {
+	color: rgb(var(--color-surface-600));
+}
+
+/* ========================================
+   Animation Utilities
+   ======================================== */
+
+/* Fade in animation */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+.animate-fade-in {
+	animation: fadeIn 0.3s ease-in;
+}
+
+/* Stagger children animations */
+.stagger-children > * {
+	animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }

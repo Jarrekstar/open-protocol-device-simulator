@@ -32,3 +32,11 @@ export const TOAST = {
 	/** Default duration for toast notifications (milliseconds) */
 	DEFAULT_DURATION_MS: 3000
 } as const;
+
+/**
+ * UI component constants
+ */
+export const UI = {
+	/** Number of data points to display in sparkline charts */
+	SPARKLINE_DATA_POINTS: 10
+} as const;

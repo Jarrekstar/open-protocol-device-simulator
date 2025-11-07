@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { FormField, Button } from '$lib/components/ui';
+	import { FormField, Button, RangeSlider } from '$lib/components/ui';
 	import { validatePset } from '$lib/utils';
 	import type { Pset } from '$lib/types';
 
@@ -58,57 +58,77 @@
 		class={formErrors.name ? 'input-error' : ''}
 	/>
 
-	<div class="grid grid-cols-2 gap-4">
-		<FormField
-			label="Torque Min (Nm)"
-			type="number"
-			bind:value={formData.torque_min}
-			step={0.1}
+	<div>
+		<RangeSlider
+			label="Torque Range"
 			min={0}
-			required={true}
-			inputClass={formErrors.torque ? 'border-error-500' : ''}
-		/>
-
-		<FormField
-			label="Torque Max (Nm)"
-			type="number"
-			bind:value={formData.torque_max}
+			max={200}
+			bind:valueMin={formData.torque_min}
+			bind:valueMax={formData.torque_max}
 			step={0.1}
-			min={0}
-			required={true}
-			inputClass={formErrors.torque ? 'border-error-500' : ''}
+			unit="Nm"
 		/>
+		{#if formErrors.torque}
+			<p class="text-error-500 text-sm mt-1">{formErrors.torque}</p>
+		{/if}
+		<div class="grid grid-cols-2 gap-4 mt-3">
+			<FormField
+				label="Min"
+				type="number"
+				bind:value={formData.torque_min}
+				step={0.1}
+				min={0}
+				required={true}
+				inputClass={formErrors.torque ? 'border-error-500' : ''}
+			/>
+			<FormField
+				label="Max"
+				type="number"
+				bind:value={formData.torque_max}
+				step={0.1}
+				min={0}
+				required={true}
+				inputClass={formErrors.torque ? 'border-error-500' : ''}
+			/>
+		</div>
 	</div>
-	{#if formErrors.torque}
-		<p class="text-error-500 text-sm -mt-2">{formErrors.torque}</p>
-	{/if}
 
-	<div class="grid grid-cols-2 gap-4">
-		<FormField
-			label="Angle Min (°)"
-			type="number"
-			bind:value={formData.angle_min}
-			step={0.1}
+	<div>
+		<RangeSlider
+			label="Angle Range"
 			min={0}
 			max={360}
-			required={true}
-			inputClass={formErrors.angle ? 'border-error-500' : ''}
-		/>
-
-		<FormField
-			label="Angle Max (°)"
-			type="number"
-			bind:value={formData.angle_max}
+			bind:valueMin={formData.angle_min}
+			bind:valueMax={formData.angle_max}
 			step={0.1}
-			min={0}
-			max={360}
-			required={true}
-			inputClass={formErrors.angle ? 'border-error-500' : ''}
+			unit="°"
 		/>
+		{#if formErrors.angle}
+			<p class="text-error-500 text-sm mt-1">{formErrors.angle}</p>
+		{/if}
+		<div class="grid grid-cols-2 gap-4 mt-3">
+			<FormField
+				label="Min"
+				type="number"
+				bind:value={formData.angle_min}
+				step={0.1}
+				min={0}
+				max={360}
+				required={true}
+				inputClass={formErrors.angle ? 'border-error-500' : ''}
+			/>
+			<FormField
+				label="Max"
+				type="number"
+				bind:value={formData.angle_max}
+				step={0.1}
+				min={0}
+				max={360}
+				required={true}
+				inputClass={formErrors.angle ? 'border-error-500' : ''}
+			/>
+		</div>
 	</div>
-	{#if formErrors.angle}
-		<p class="text-error-500 text-sm -mt-2">{formErrors.angle}</p>
-	{/if}
 
 	<FormField
 		label="Description (optional)"
