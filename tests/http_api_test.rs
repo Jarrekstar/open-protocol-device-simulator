@@ -60,7 +60,9 @@ async fn test_invalid_multi_spindle_config() {
 /// Test tightening simulation with event broadcasting
 #[tokio::test]
 async fn test_tightening_simulation() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, handler::data::TighteningResult};
+    use open_protocol_device_simulator::{
+        DeviceState, SimulatorEvent, handler::data::TighteningResult,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, mut receiver) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
@@ -125,7 +127,9 @@ async fn test_tightening_simulation() {
     // Verify event was received
     let event = receiver.recv().await.unwrap();
     match event {
-        SimulatorEvent::TighteningCompleted { result: received_result } => {
+        SimulatorEvent::TighteningCompleted {
+            result: received_result,
+        } => {
             assert_eq!(received_result.batch_counter, 1);
             assert_eq!(received_result.tightening_id, Some(1));
             assert!(received_result.tightening_status);

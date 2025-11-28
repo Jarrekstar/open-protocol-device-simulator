@@ -42,7 +42,9 @@ impl ObservableState {
             let mut state = self.state.write().unwrap();
             state.enable_tool();
         }
-        let _ = self.broadcaster.send(SimulatorEvent::ToolStateChanged { enabled: true });
+        let _ = self
+            .broadcaster
+            .send(SimulatorEvent::ToolStateChanged { enabled: true });
     }
 
     /// Disable the tool and broadcast the event
@@ -51,9 +53,9 @@ impl ObservableState {
             let mut state = self.state.write().unwrap();
             state.disable_tool();
         }
-        let _ = self.broadcaster.send(SimulatorEvent::ToolStateChanged {
-            enabled: false,
-        });
+        let _ = self
+            .broadcaster
+            .send(SimulatorEvent::ToolStateChanged { enabled: false });
     }
 
     /// Set the parameter set and broadcast the event
@@ -65,7 +67,7 @@ impl ObservableState {
         }
         let _ = self.broadcaster.send(SimulatorEvent::PsetChanged {
             pset_id,
-            pset_name: name_for_broadcast
+            pset_name: name_for_broadcast,
         });
     }
 
@@ -75,7 +77,9 @@ impl ObservableState {
             let mut state = self.state.write().unwrap();
             state.set_vehicle_id(vin.clone());
         }
-        let _ = self.broadcaster.send(SimulatorEvent::VehicleIdChanged { vin });
+        let _ = self
+            .broadcaster
+            .send(SimulatorEvent::VehicleIdChanged { vin });
     }
 
     /// Set batch size (does not broadcast an event as this is internal config)
@@ -86,19 +90,17 @@ impl ObservableState {
 
     /// Broadcast auto-tightening progress update
     pub fn broadcast_auto_progress(&self, counter: u32, target_size: u32, running: bool) {
-        let _ = self.broadcaster.send(SimulatorEvent::AutoTighteningProgress {
-            counter,
-            target_size,
-            running,
-        });
+        let _ = self
+            .broadcaster
+            .send(SimulatorEvent::AutoTighteningProgress {
+                counter,
+                target_size,
+                running,
+            });
     }
 
     /// Enable multi-spindle mode (does not broadcast as it's config change)
-    pub fn enable_multi_spindle(
-        &self,
-        spindle_count: u8,
-        sync_id: u32,
-    ) -> Result<(), String> {
+    pub fn enable_multi_spindle(&self, spindle_count: u8, sync_id: u32) -> Result<(), String> {
         let mut state = self.state.write().unwrap();
         state.enable_multi_spindle(spindle_count, sync_id)
     }

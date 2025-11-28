@@ -145,12 +145,12 @@
 				<div class="card overflow-hidden">
 					<div class="overflow-x-auto">
 						<table class="w-full">
-							<thead class="bg-surface-100 dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
+							<thead class="bg-surface-100 dark:bg-surface-300 border-b border-surface-200 dark:border-surface-700">
 								<tr>
-									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">#</th>
-									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">Type</th>
-									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">Status</th>
-									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">Details</th>
+									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-400 dark:text-surface-300 uppercase tracking-wider">#</th>
+									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-400 dark:text-surface-300 uppercase tracking-wider">Type</th>
+									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-400 dark:text-surface-300 uppercase tracking-wider">Status</th>
+									<th class="px-4 py-3 text-left text-xs font-semibold text-surface-400 dark:text-surface-300 uppercase tracking-wider">Details</th>
 								</tr>
 							</thead>
 							<tbody class="divide-y divide-surface-200 dark:divide-surface-700">

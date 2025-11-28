@@ -111,7 +111,7 @@ impl FailureSimulator {
     pub fn new(config: FailureConfig) -> Self {
         Self {
             config,
-            rng: rand::thread_rng(),
+            rng: rand::rng(),
         }
     }
 
@@ -126,7 +126,7 @@ impl FailureSimulator {
         if !self.config.enabled || self.config.packet_loss_rate == 0.0 {
             return false;
         }
-        self.rng.r#gen::<f64>() < self.config.packet_loss_rate
+        self.rng.random::<f64>() < self.config.packet_loss_rate
     }
 
     /// Get delay duration for this message
@@ -140,7 +140,7 @@ impl FailureSimulator {
             self.config.delay_max_ms
         } else {
             self.rng
-                .gen_range(self.config.delay_min_ms..=self.config.delay_max_ms)
+                .random_range(self.config.delay_min_ms..=self.config.delay_max_ms)
         };
 
         Duration::from_millis(delay_ms)
@@ -152,7 +152,7 @@ impl FailureSimulator {
         if !self.config.enabled || self.config.corruption_rate == 0.0 {
             return false;
         }
-        self.rng.r#gen::<f64>() < self.config.corruption_rate
+        self.rng.random::<f64>() < self.config.corruption_rate
     }
 
     /// Decide if the connection should be forcefully dropped
@@ -161,7 +161,7 @@ impl FailureSimulator {
         if !self.config.enabled || self.config.force_disconnect_rate == 0.0 {
             return false;
         }
-        self.rng.r#gen::<f64>() < self.config.force_disconnect_rate
+        self.rng.random::<f64>() < self.config.force_disconnect_rate
     }
 
     /// Corrupt a message by modifying its bytes
@@ -172,7 +172,7 @@ impl FailureSimulator {
         }
 
         let mut corrupted = original.to_vec();
-        let corruption_type = self.rng.gen_range(0..=4);
+        let corruption_type = self.rng.random_range(0..=4);
 
         match corruption_type {
             0 => {
@@ -193,22 +193,22 @@ impl FailureSimulator {
             }
             2 => {
                 // Flip random bytes
-                let num_flips = self.rng.gen_range(1..=3.min(corrupted.len()));
+                let num_flips = self.rng.random_range(1..=3.min(corrupted.len()));
                 for _ in 0..num_flips {
-                    let idx = self.rng.gen_range(0..corrupted.len());
+                    let idx = self.rng.random_range(0..corrupted.len());
                     corrupted[idx] = corrupted[idx].wrapping_add(1);
                 }
             }
             3 => {
                 // Truncate message
-                let new_len = self.rng.gen_range(1..corrupted.len());
+                let new_len = self.rng.random_range(1..corrupted.len());
                 corrupted.truncate(new_len);
             }
             4 => {
                 // Add garbage bytes
-                let garbage_count = self.rng.gen_range(1..=10);
+                let garbage_count = self.rng.random_range(1..=10);
                 for _ in 0..garbage_count {
-                    corrupted.push(self.rng.r#gen());
+                    corrupted.push(self.rng.random());
                 }
             }
             _ => unreachable!(),
