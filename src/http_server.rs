@@ -1007,7 +1007,9 @@ async fn handle_websocket(socket: WebSocket, server_state: ServerState) {
             match msg {
                 Message::Text(text) => {
                     // Try to parse as JSON to check if it's a ping message
-                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) && value.get("type").and_then(|t| t.as_str()) == Some("ping") {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text)
+                        && value.get("type").and_then(|t| t.as_str()) == Some("ping")
+                    {
                         // Send pong response
                         let pong_msg = r#"{"type":"pong"}"#.to_string();
                         let _ = pong_tx.send(pong_msg).await;
