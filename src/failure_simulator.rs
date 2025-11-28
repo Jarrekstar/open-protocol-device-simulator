@@ -294,9 +294,11 @@ mod tests {
 
     #[test]
     fn test_simulator_packet_loss() {
-        let mut config = FailureConfig::default();
-        config.enabled = true;
-        config.packet_loss_rate = 1.0; // Always drop
+        let config = FailureConfig {
+            enabled: true,
+            packet_loss_rate: 1.0, // Always drop
+            ..Default::default()
+        };
 
         let mut sim = FailureSimulator::new(config);
         assert!(sim.should_drop_packet());
@@ -304,10 +306,12 @@ mod tests {
 
     #[test]
     fn test_simulator_delay() {
-        let mut config = FailureConfig::default();
-        config.enabled = true;
-        config.delay_min_ms = 100;
-        config.delay_max_ms = 200;
+        let config = FailureConfig {
+            enabled: true,
+            delay_min_ms: 100,
+            delay_max_ms: 200,
+            ..Default::default()
+        };
 
         let mut sim = FailureSimulator::new(config);
         let delay = sim.get_delay();
@@ -316,9 +320,11 @@ mod tests {
 
     #[test]
     fn test_message_corruption_modifies_bytes() {
-        let mut config = FailureConfig::default();
-        config.enabled = true;
-        config.corruption_rate = 1.0;
+        let config = FailureConfig {
+            enabled: true,
+            corruption_rate: 1.0,
+            ..Default::default()
+        };
 
         let mut sim = FailureSimulator::new(config);
         let original = b"00200001001         001";
@@ -330,8 +336,10 @@ mod tests {
 
     #[test]
     fn test_corruption_types_are_invalid_protocol() {
-        let mut config = FailureConfig::default();
-        config.enabled = true;
+        let config = FailureConfig {
+            enabled: true,
+            ..Default::default()
+        };
 
         let mut sim = FailureSimulator::new(config);
         let original = b"00200001001         001";
@@ -343,7 +351,6 @@ mod tests {
             if corrupted != original {
                 // Could check that it's not parseable as valid protocol
                 // For now, just verify it changed
-                assert!(true);
                 return;
             }
         }

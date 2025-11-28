@@ -2,44 +2,43 @@ use crate::subscriptions::Subscriptions;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-/// Connection session state machine using the typestate pattern
-///
-/// This ensures that invalid state transitions are caught at compile time.
-/// States: Disconnected → Connected → Ready
-///
-/// # Valid Usage Example
-///
-/// ```ignore
-/// let session = ConnectionSession::new();
-/// let session = session.connect(addr);
-/// let session = session.authenticate();
-/// session.update_keep_alive();
-/// ```
-///
-/// # Compile-Time Safety
-///
-/// The typestate pattern prevents invalid state transitions at compile time:
-///
-/// ```compile_fail
-/// # use open_protocol_device_simulator::session::ConnectionSession;
-/// let session = ConnectionSession::new();
-/// // ERROR: Cannot call update_keep_alive() on Disconnected state
-/// session.update_keep_alive();
-/// ```
-///
-/// ```compile_fail
-/// # use open_protocol_device_simulator::session::ConnectionSession;
-/// # use std::net::{SocketAddr, IpAddr, Ipv4Addr};
-/// # let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-/// let session = ConnectionSession::new();
-/// let session = session.connect(addr);
-/// // ERROR: Cannot call subscribe_tightening_result() on Connected state
-/// session.subscribe_tightening_result();
-/// ```
-
 // ============================================================================
 // State marker types (zero-sized)
 // ============================================================================
+// Connection session state machine using the typestate pattern
+//
+// This ensures that invalid state transitions are caught at compile time.
+// States: Disconnected → Connected → Ready
+//
+// # Valid Usage Example
+//
+// ```ignore
+// let session = ConnectionSession::new();
+// let session = session.connect(addr);
+// let session = session.authenticate();
+// session.update_keep_alive();
+// ```
+//
+// # Compile-Time Safety
+//
+// The typestate pattern prevents invalid state transitions at compile time:
+//
+// ```compile_fail
+// # use open_protocol_device_simulator::session::ConnectionSession;
+// let session = ConnectionSession::new();
+// // ERROR: Cannot call update_keep_alive() on Disconnected state
+// session.update_keep_alive();
+// ```
+//
+// ```compile_fail
+// # use open_protocol_device_simulator::session::ConnectionSession;
+// # use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+// # let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+// let session = ConnectionSession::new();
+// let session = session.connect(addr);
+// // ERROR: Cannot call subscribe_tightening_result() on Connected state
+// session.subscribe_tightening_result();
+// ```
 
 /// Initial state - no connection established
 pub struct Disconnected;

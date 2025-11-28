@@ -392,7 +392,6 @@ async fn serve_tcp_client() -> Result<(), ServeError> {
             }
             // This runs when the loop exits (disconnect)
             println!("Client disconnected: {}", session.addr());
-            drop(session); // Explicitly drop to clean up resources
         });
     }
 }
