@@ -1,6 +1,6 @@
 # Open Protocol Device Simulator
 
-**A full-featured Rust simulator for Open Protocol tightening controllers with a modern web interface - test your MES/PLC integrations without physical
+A full-featured Rust simulator for Open Protocol tightening controllers with a modern web interface - test your integrations without physical tightening hardware.
 
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-blue.svg)](https://www.rust-lang.org)
