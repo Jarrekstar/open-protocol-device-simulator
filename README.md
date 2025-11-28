@@ -5,6 +5,8 @@
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-5.x-ff3e00.svg)](https://kit.svelte.dev)
+![Rust CI](https://github.com/Jarrekstar/open-protocol-device-simulator/actions/workflows/rust.yml/badge.svg)
+![Frontend CI](https://github.com/Jarrekstar/open-protocol-device-simulator/actions/workflows/frontend.yml/badge.svg)
 
 ## The Problem
 
