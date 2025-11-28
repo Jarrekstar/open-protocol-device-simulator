@@ -9,9 +9,7 @@ use crate::state::DeviceState;
 use axum::{
     Router,
     extract::{
-        Path,
-        State as AxumState,
-        WebSocketUpgrade,
+        Path, State as AxumState, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::StatusCode,
@@ -20,10 +18,10 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 
 /// Shared state for HTTP server
 #[derive(Clone)]
@@ -107,9 +105,12 @@ fn build_tightening_result(
 
 /// Create the HTTP router with all endpoints configured
 pub fn create_router(observable_state: ObservableState) -> Router {
-    let pset_repository = crate::pset::create_sqlite_repository("simulator.db")
-        .unwrap_or_else(|e| {
-            eprintln!("Failed to create SQLite repository: {}. Falling back to in-memory.", e);
+    let pset_repository =
+        crate::pset::create_sqlite_repository("simulator.db").unwrap_or_else(|e| {
+            eprintln!(
+                "Failed to create SQLite repository: {}. Falling back to in-memory.",
+                e
+            );
             crate::pset::create_default_repository()
         });
 
@@ -131,9 +132,15 @@ pub fn create_router(observable_state: ObservableState) -> Router {
         .route("/auto-tightening/stop", post(stop_auto_tightening))
         .route("/auto-tightening/status", get(get_auto_tightening_status))
         .route("/config/multi-spindle", post(configure_multi_spindle))
-        .route("/config/failure", get(get_failure_config).post(update_failure_config))
+        .route(
+            "/config/failure",
+            get(get_failure_config).post(update_failure_config),
+        )
         .route("/psets", get(get_psets).post(create_pset))
-        .route("/psets/{id}", get(get_pset_by_id).put(update_pset).delete(delete_pset))
+        .route(
+            "/psets/{id}",
+            get(get_pset_by_id).put(update_pset).delete(delete_pset),
+        )
         .route("/psets/{id}/select", post(select_pset))
         .route("/ws/events", get(websocket_handler))
         .layer(cors)
@@ -152,7 +159,9 @@ pub async fn start_http_server(observable_state: ObservableState) {
     println!("Endpoints:");
     println!("  GET    /state                     - View device state");
     println!("  POST   /simulate/tightening       - Simulate a single tightening operation");
-    println!("  POST   /auto-tightening/start     - Start automated tightening simulation (continuous)");
+    println!(
+        "  POST   /auto-tightening/start     - Start automated tightening simulation (continuous)"
+    );
     println!("  POST   /auto-tightening/stop      - Stop automated tightening simulation");
     println!("  GET    /auto-tightening/status    - Get auto-tightening status");
     println!("  POST   /config/multi-spindle      - Configure multi-spindle mode");
@@ -205,7 +214,10 @@ async fn simulate_tightening(
     let params = match (payload.torque, payload.angle) {
         (Some(torque), Some(angle)) => {
             // Manual override: use exact values (min=max)
-            println!("Manual tightening override: Torque={:.1} Nm, Angle={:.1}°", torque, angle);
+            println!(
+                "Manual tightening override: Torque={:.1} Nm, Angle={:.1}°",
+                torque, angle
+            );
             TighteningParams {
                 target_torque: torque,
                 torque_min: torque,
@@ -229,8 +241,12 @@ async fn simulate_tightening(
 
     println!(
         "Simulating tightening with params: Torque {:.1}-{:.1} Nm (target: {:.1}), Angle {:.1}-{:.1}° (target: {:.1})",
-        params.torque_min, params.torque_max, params.target_torque,
-        params.angle_min, params.angle_max, params.target_angle
+        params.torque_min,
+        params.torque_max,
+        params.target_torque,
+        params.angle_min,
+        params.angle_max,
+        params.target_angle
     );
 
     // Run FSM simulation
@@ -691,7 +707,9 @@ async fn stop_auto_tightening(
             (counter, target)
         };
 
-        server_state.observable_state.broadcast_auto_progress(counter, target_size, false);
+        server_state
+            .observable_state
+            .broadcast_auto_progress(counter, target_size, false);
 
         (
             StatusCode::OK,
@@ -870,7 +888,10 @@ async fn update_failure_config(
     let new_config = if let Some(health) = payload.connection_health {
         // Simple mode: use connection health slider
         let health_clamped = health.min(100);
-        println!("Updating failure config via connection health: {}%", health_clamped);
+        println!(
+            "Updating failure config via connection health: {}%",
+            health_clamped
+        );
         FailureConfig::from_health(health_clamped)
     } else {
         // Advanced mode: update individual fields
@@ -924,9 +945,15 @@ async fn update_failure_config(
     println!("  Enabled: {}", new_config.enabled);
     println!("  Connection Health: {}%", new_config.connection_health);
     println!("  Packet Loss: {:.1}%", new_config.packet_loss_rate * 100.0);
-    println!("  Delay: {}-{} ms", new_config.delay_min_ms, new_config.delay_max_ms);
+    println!(
+        "  Delay: {}-{} ms",
+        new_config.delay_min_ms, new_config.delay_max_ms
+    );
     println!("  Corruption: {:.1}%", new_config.corruption_rate * 100.0);
-    println!("  Disconnect: {:.1}%", new_config.force_disconnect_rate * 100.0);
+    println!(
+        "  Disconnect: {:.1}%",
+        new_config.force_disconnect_rate * 100.0
+    );
 
     (
         StatusCode::OK,
@@ -1052,9 +1079,7 @@ async fn handle_websocket(socket: WebSocket, server_state: ServerState) {
 
 /// Handler for GET /psets endpoint
 /// Returns all available PSETs
-async fn get_psets(
-    AxumState(server_state): AxumState<ServerState>,
-) -> impl IntoResponse {
+async fn get_psets(AxumState(server_state): AxumState<ServerState>) -> impl IntoResponse {
     let repo = server_state.pset_repository.read().unwrap();
     let psets = repo.get_all();
     Json(psets)
@@ -1098,7 +1123,7 @@ async fn select_pset(
                         "error": format!("PSET with id {} not found", id)
                     })),
                 )
-                    .into_response()
+                    .into_response();
             }
         }
     };

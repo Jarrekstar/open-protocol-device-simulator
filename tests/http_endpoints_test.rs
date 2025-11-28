@@ -12,7 +12,9 @@ use tower::ServiceExt;
 /// Test GET /state endpoint
 #[tokio::test]
 async fn test_get_state_endpoint() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
@@ -46,7 +48,9 @@ async fn test_get_state_endpoint() {
 /// Test POST /simulate/tightening endpoint
 #[tokio::test]
 async fn test_simulate_tightening_endpoint() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     {
@@ -89,7 +93,9 @@ async fn test_simulate_tightening_endpoint() {
 /// Test POST /auto-tightening/start endpoint
 #[tokio::test]
 async fn test_start_auto_tightening_endpoint() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
@@ -127,7 +133,9 @@ async fn test_start_auto_tightening_endpoint() {
 /// Test POST /auto-tightening/start conflict (already running)
 #[tokio::test]
 async fn test_start_auto_tightening_conflict() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
     use std::sync::atomic::AtomicBool;
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
@@ -180,7 +188,9 @@ async fn test_start_auto_tightening_conflict() {
 /// Test POST /auto-tightening/stop endpoint
 #[tokio::test]
 async fn test_stop_auto_tightening_endpoint() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
@@ -210,7 +220,9 @@ async fn test_stop_auto_tightening_endpoint() {
 /// Test GET /auto-tightening/status endpoint
 #[tokio::test]
 async fn test_get_auto_tightening_status_endpoint() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
@@ -241,7 +253,9 @@ async fn test_get_auto_tightening_status_endpoint() {
 /// Test POST /config/multi-spindle endpoint (enable)
 #[tokio::test]
 async fn test_configure_multi_spindle_enable() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
@@ -286,7 +300,9 @@ async fn test_configure_multi_spindle_enable() {
 /// Test POST /config/multi-spindle endpoint (disable)
 #[tokio::test]
 async fn test_configure_multi_spindle_disable() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     {
@@ -331,7 +347,9 @@ async fn test_configure_multi_spindle_disable() {
 /// Test POST /config/multi-spindle endpoint (invalid config)
 #[tokio::test]
 async fn test_configure_multi_spindle_invalid() {
-    use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, http_server};
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, http_server,
+    };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);

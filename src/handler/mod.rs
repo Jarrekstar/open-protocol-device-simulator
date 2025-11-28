@@ -98,7 +98,9 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
     registry.register(17, Box::new(pset_unsubscribe::PsetUnsubscribeHandler));
     registry.register(
         18,
-        Box::new(pset_select::PsetSelectHandler::new(observable_state.clone())),
+        Box::new(pset_select::PsetSelectHandler::new(
+            observable_state.clone(),
+        )),
     );
     registry.register(
         19,
@@ -112,7 +114,9 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
     );
     registry.register(
         43,
-        Box::new(tool_enable::ToolEnableHandler::new(observable_state.clone())),
+        Box::new(tool_enable::ToolEnableHandler::new(
+            observable_state.clone(),
+        )),
     );
     registry.register(
         50,

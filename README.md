@@ -1,110 +1,293 @@
 # Open Protocol Device Simulator
 
-A simulator for Atlas Copco's Open Protocol, designed for developing and testing integrator applications without physical tightening hardware.
+**A full-featured Rust simulator for Open Protocol tightening controllers with a modern web interface - test your MES/PLC integrations without physical hardware.**
 
-## Overview
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
+[![SvelteKit](https://img.shields.io/badge/SvelteKit-5.x-ff3e00.svg)](https://kit.svelte.dev)
 
-This simulator implements the Atlas Copco Open Protocol specification, allowing developers to:
-- Test client integrations without hardware
-- Simulate realistic tightening operations with configurable parameters
-- Test batch workflows with retry logic
-- Validate subscription and event handling
-- Load test with automated tightening cycles
+## The Problem
 
-## Features
+Integrating tightening tools (Atlas Copco, Desoutter, Stanley, etc.) into Manufacturing Execution Systems requires extensive testing. Physical controllers are expensive, often unavailable during development, and difficult to use for simulating edge cases, error conditions, and high-volume scenarios.
 
-### Core Protocol Support
-- ✅ **MID 0001/0002** - Communication start/acknowledge
-- ✅ **MID 0004** - Error responses with codes
-- ✅ **MID 0005** - Command accepted
-- ✅ **MID 0014/0016** - Parameter set subscription/unsubscribe
-- ✅ **MID 0015** - Parameter set selected (broadcast)
-- ✅ **MID 0018** - Parameter set selection
-- ✅ **MID 0019** - Batch size configuration
-- ✅ **MID 0042/0043** - Tool disable/enable
-- ✅ **MID 0052** - Vehicle ID assignment
-- ✅ **MID 0060/0063** - Tightening result subscription/unsubscribe
-- ✅ **MID 0061** - Last tightening result data (23 parameters)
-- ✅ **MID 0062** - Tightening result acknowledgement
-- ✅ **MID 9999** - Keep-alive
+## The Solution
 
-### Advanced Features
-- **State Machine Architecture** - TypeState pattern for compile-time safety
-- **Batch Management** - Proper counter logic (OK-only increment) with retry support
-- **Event Broadcasting** - Real-time pub/sub for subscribed clients
-- **Continuous Auto-Tightening** - Runs through multiple sequential batches until stopped
-- **Session Management** - Per-client connection tracking with subscription isolation
-- **Device Operational FSM** - Realistic state transitions (Idle → Tightening → Evaluating)
-- **Multi-Client Support** - Each TCP client gets isolated subscriptions and independent session state
+This simulator implements the **Open Protocol** specification with both a TCP server for integrations and a **modern web dashboard** for monitoring and control. Use it to:
 
+- ✅ **Develop integrations** without waiting for hardware
+- ✅ **Monitor real-time tightening** through an intuitive web interface
+- ✅ **Test edge cases** (errors, timeouts, NOK results, network failures) that are hard to reproduce
+- ✅ **Manage parameter sets** with full CRUD operations and persistence
+- ✅ **Simulate multi-spindle** operations with synchronized tightening
+- ✅ **Run CI/CD pipelines** with automated integration tests
+- ✅ **Load test** your systems with high-frequency tightening cycles
+- ✅ **Train developers** on Open Protocol without risking production equipment
+
+## Why This Exists
+
+I built this while working on MES integrations for manufacturing assembly lines. Every time we needed to test new integration code or troubleshoot issues, we'd either wait for hardware availability or risk disrupting production systems. This simulator eliminates that bottleneck.
+
+**Important Note**: This simulator implements the **specific MIDs and features I needed** for my integration work. It covers the most common use cases (tightening results, batch management, parameter sets, multi-spindle) but is not a complete Open Protocol implementation. For example:
+- Only **revision 1** of MIDs is supported (not revision 2+)
+- **Job system** (MID 0030-0039) is not implemented
+- Many advanced features are not yet implemented
+
+This focused approach made it practical to build and maintain. The architecture is designed to be extensible, so additional features can be added as needed. Contributions welcome!
+
+It's written in Rust for performance and type safety, with a SvelteKit frontend for a modern developer experience. The manufacturing industry needs better tooling.
+
+## Screenshots
+
+### Mission Control Dashboard
+Real-time operations overview with device status, latest tightening results, connection health metrics, and live performance indicators.
+
+![Mission Control Dashboard](docs/screenshots/dashboard.png)
+
+### Control Panel - Tightening Configuration
+Configure single tightening operations with PSET selection and manual parameter override options.
+
+![Control Panel - Tightening](docs/screenshots/control-panel-tightening.png)
+
+### Control Panel - Automation Settings
+Automated tightening cycles and multi-spindle configuration for testing complex assembly scenarios.
+
+![Control Panel - Automation](docs/screenshots/control-panel-automation.png)
+
+### Control Panel - Failure Injection
+Network failure simulation for resilience testing, with configurable packet loss, latency, and corruption rates.
+
+![Control Panel - Advanced](docs/screenshots/control-panel-advanced.png)
+
+### Parameter Set Management
+Full CRUD interface for managing tightening parameter sets with visual torque/angle range displays.
+
+![PSET Management](docs/screenshots/pset-list.png)
+
+### PSET Editor
+Intuitive range sliders and real-time validation for torque and angle configuration.
+
+![PSET Editor](docs/screenshots/pset-editor.png)
+
+### Event Log
+Real-time event stream with filtering, search, and multiple view modes for debugging and monitoring.
+
+![Event Log](docs/screenshots/events.png)
+
+---
 ## Quick Start
 
 ### Prerequisites
-- Rust 1.70+ ([Install Rust](https://rustup.rs/))
-- No other dependencies required
+- **Rust 1.70+** ([Install Rust](https://rustup.rs/))
+- **Node.js 18+** ([Install Node](https://nodejs.org/))
 
 ### Installation
 
 ```bash
-git clone <repository-url>
-cd open-protocol-device-simulator
+git clone https://github.com/YOUR_USERNAME/open-protocol-simulator
+cd open-protocol-simulator
+
+# Build backend
 cargo build --release
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
-### Running the Simulator
+### Run It
 
+**Option 1: Backend + Frontend (Recommended)**
+```bash
+# Terminal 1: Start backend
+cargo run --release
+
+# Terminal 2: Start frontend dev server
+cd frontend
+npm run dev
+```
+
+Then open **http://localhost:5173** in your browser to access the web dashboard.
+
+**Option 2: Backend Only**
 ```bash
 cargo run --release
 ```
 
-This starts two servers:
-- **TCP Server**: `0.0.0.0:8080` (Open Protocol)
-- **HTTP Server**: `0.0.0.0:8081` (Control API)
+This starts:
+- **TCP Server** on `0.0.0.0:8080` (Open Protocol)
+- **HTTP API** on `0.0.0.0:8081` (REST & WebSocket)
+
+### Test It
+
+**Via Web Interface:**
+1. Open http://localhost:5173
+2. View real-time device status on the Dashboard
+3. Go to Control Panel → Simulate a tightening
+4. Watch the result appear in real-time
+
+**Via Command Line:**
+```bash
+# Terminal 1: Start simulator
+cargo run
+
+# Terminal 2: Connect a client and subscribe to results
+echo '00200060001         001' | nc localhost 8080
+
+# Terminal 3: Trigger a tightening
+curl -X POST http://localhost:8081/simulate/tightening \
+  -H "Content-Type: application/json" \
+  -d '{"torque": 12.5, "angle": 40.0, "ok": true}'
+```
+
+You should see a MID 0061 tightening result message in Terminal 2.
+
+## Features
+
+### 🎨 Web Dashboard
+
+Modern, responsive web interface built with SvelteKit:
+
+**Dashboard Page** - Mission Control interface:
+- Real-time device status and health monitoring
+- Latest tightening results with visual progress bars
+- Connection health metrics (latency, packet loss)
+- Performance sparkline charts
+- Recent activity timeline
+
+**Control Panel** - Advanced simulation controls:
+- Single tightening simulation with custom parameters
+- Auto-tightening automation (continuous cycles)
+- Multi-spindle configuration (2-16 spindles)
+- Failure injection for testing resilience
+
+**PSET Management** - Full parameter set CRUD:
+- Browse, search, and filter parameter sets
+- Create, edit, and delete PSETs
+- Visual torque/angle range displays
+- Select active PSET for tightening
+
+**Events Page** - Real-time event monitoring:
+- Live event stream via WebSocket
+- Filter by event type
+- Search functionality
+- Timeline and card views
+
+### 🔌 Protocol Support
+
+Implements the most commonly used MIDs from the Open Protocol specification:
+
+**Core Communication:**
+- ✅ **MID 0001/0002** - Communication start/acknowledge
+- ✅ **MID 0003/0004** - Communication stop/error responses
+- ✅ **MID 0005** - Command accepted
+- ✅ **MID 9999** - Keep-alive
+
+**Parameter Sets:**
+- ✅ **MID 0014/0015/0016** - PSET subscription/broadcast/unsubscribe
+- ✅ **MID 0018** - Parameter set selection
+- ✅ **MID 0019** - Batch size configuration
+
+**Tightening Results:**
+- ✅ **MID 0060/0061/0062/0063** - Result subscription/broadcast/ack/unsubscribe
+- ✅ **MID 0061** - Last tightening result data (23 parameters)
+
+**Vehicle ID:**
+- ✅ **MID 0050/0051/0052/0053** - VIN subscription/download/broadcast/ack
+
+**Tool Control:**
+- ✅ **MID 0042/0043** - Tool disable/enable
+
+**Multi-Spindle Mode:**
+- ✅ **MID 0090/0091/0093** - Multi-spindle status subscription/broadcast/ack
+- ✅ **MID 0100/0101/0102** - Multi-spindle result subscription/broadcast/ack
+
+### 🚀 Advanced Capabilities
+
+**Web Interface:**
+- **Real-time WebSocket** - Event streaming with latency monitoring
+- **Persistent Storage** - SQLite database for PSET management
+- **Responsive Design** - Industrial dashboard UI with dark/light themes
+- **Type-safe Frontend** - TypeScript with Svelte 5
+
+**Backend Features:**
+- **Realistic Batch Management** - Proper counter logic (increments only on OK, supports retry workflows)
+- **Multi-Spindle Coordination** - Configurable 2-16 spindle operations with sync IDs
+- **State Machine Architecture** - TypeState pattern for compile-time safety
+- **Multi-Client Support** - Each TCP client gets isolated subscriptions and session state
+- **Continuous Auto-Tightening** - Simulate production workflows across multiple batches
+- **Event Broadcasting** - Real-time pub/sub for subscribed clients
+- **Failure Injection** - Simulate network issues (latency, packet loss, corruption)
+- **HTTP + WebSocket API** - Full REST API and real-time event streaming
 
 ## Architecture
 
-### High-Level Design
+Built with modern Rust backend and SvelteKit frontend:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    TCP Clients (Port 8080)              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │ Client 1 │  │ Client 2 │  │ Client 3 │             │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘             │
-│       │             │             │                      │
-│       └─────────────┴─────────────┘                     │
-│                     │                                    │
-│         ┌───────────▼──────────────┐                    │
-│         │  Handler Registry        │                    │
-│         │  (MID Router)            │                    │
-│         └───────────┬──────────────┘                    │
-│                     │                                    │
-│         ┌───────────▼──────────────┐                    │
-│         │   Device State           │                    │
-│         │   - Batch Manager        │                    │
-│         │   - Device FSM           │                    │
-│         │   - Configuration        │                    │
-│         └───────────┬──────────────┘                    │
-│                     │                                    │
-│         ┌───────────▼──────────────┐                    │
-│         │  Event Broadcaster       │                    │
-│         │  (tokio broadcast)       │                    │
-│         └──────────────────────────┘                    │
-└─────────────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│              HTTP Control API (Port 8081)               │
-│  - GET  /state                                          │
-│  - POST /simulate/tightening                            │
-│  - POST /auto-tightening/start                          │
-│  - POST /auto-tightening/stop                           │
-│  - GET  /auto-tightening/status                         │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                   TCP Layer (Port 8080)                          │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
+│  │ Client 1 │  │ Client 2 │  │ Client 3 │  (Open Protocol)      │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘                       │
+│       └─────────────┴─────────────┘                              │
+│                     │                                             │
+│         ┌───────────▼──────────────┐                             │
+│         │  Handler Registry        │                             │
+│         │  (MID Router)            │                             │
+│         └───────────┬──────────────┘                             │
+│                     │                                             │
+│         ┌───────────▼──────────────┐                             │
+│         │ Observable Device State  │ ◄──────┐                    │
+│         │ + Event Broadcasting     │        │                    │
+│         │ + Failure Injection      │        │                    │
+│         └───────────┬──────────────┘        │                    │
+│                     │                        │                    │
+│         ┌───────────▼──────────────┐        │                    │
+│         │  Event Broadcaster       │        │                    │
+│         │  (tokio broadcast)       │        │                    │
+│         └──────────────────────────┘        │                    │
+└─────────────────────────────────────────────│────────────────────┘
+                                              │
+                      ┌───────────────────────┴─────────┐
+                      │                                  │
+┌─────────────────────▼──────────────┐  ┌───────────────▼───────────────┐
+│  HTTP REST API (Port 8081)         │  │  WebSocket (Port 8081)        │
+│  - GET  /state                     │  │  - /ws/events                 │
+│  - POST /simulate/tightening       │  │    • Real-time event stream   │
+│  - POST /auto-tightening/*         │  │    • Ping/pong latency        │
+│  - POST /config/multi-spindle      │  │    • Connection health        │
+│  - GET/POST /config/failure        │  └───────────────┬───────────────┘
+│  - CRUD /psets                     │                  │
+│  - POST /psets/{id}/select         │                  │
+└────────────────┬───────────────────┘                  │
+                 │                                       │
+                 └────────────────┬──────────────────────┘
+                                  │
+                 ┌────────────────▼────────────────┐
+                 │  SQLite Database                │
+                 │  - PSETs (simulator.db)         │
+                 │  - Torque/angle ranges          │
+                 └─────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼─────────────────────────────────┐
+│               SvelteKit Frontend (Dev: Port 5173)                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
+│  │  Dashboard   │  │ Control Panel│  │    PSETs     │           │
+│  │    (/)       │  │  (/control)  │  │  (/psets)    │           │
+│  └──────────────┘  └──────────────┘  └──────────────┘           │
+│  ┌──────────────┐                                                │
+│  │   Events     │  Technologies:                                 │
+│  │  (/events)   │  • Svelte 5 + TypeScript                       │
+│  └──────────────┘  • Tailwind CSS + Skeleton UI                  │
+│                    • Real-time WebSocket connection               │
+│                    • Responsive dark/light themes                 │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ### Module Structure
 
+**Backend (Rust):**
 ```
 src/
 ├── main.rs                    # TCP server & event multiplexing
@@ -112,16 +295,20 @@ src/
 ├── device_fsm.rs              # Device operational state machine
 ├── session.rs                 # Connection session FSM (TypeState)
 ├── subscriptions.rs           # Per-client subscription tracking
-├── state.rs                   # Global device state
+├── state.rs                   # Observable device state
 ├── events.rs                  # Event definitions (pub/sub)
-├── http_server.rs             # HTTP control API
+├── multi_spindle.rs           # Multi-spindle coordinator
+├── http_server.rs             # HTTP + WebSocket server (Axum)
+├── pset_manager.rs            # PSET CRUD with SQLite
 ├── handler/
 │   ├── mod.rs                 # Handler registry
-│   ├── communication_start.rs # MID 0001
-│   ├── pset_subscription.rs   # MID 0014
-│   ├── batch_size.rs          # MID 0019
-│   ├── tool_enable.rs         # MID 0043
-│   └── ...                    # Other MID handlers
+│   ├── communication_*.rs     # MID 0001-0005
+│   ├── pset_*.rs              # MID 0014-0019
+│   ├── tool_*.rs              # MID 0042-0043
+│   ├── vehicle_id*.rs         # MID 0050-0053
+│   ├── tightening_*.rs        # MID 0060-0063
+│   ├── multi_spindle_*.rs     # MID 0090-0102
+│   └── keep_alive.rs          # MID 9999
 ├── protocol/
 │   ├── parser.rs              # Message parsing
 │   ├── serializer.rs          # Response serialization
@@ -130,44 +317,39 @@ src/
     └── null_delimited_codec.rs # Framing (0x00 delimiter)
 ```
 
-### State Machines
-
-#### Connection Session FSM (Per-Client)
+**Frontend (SvelteKit):**
 ```
-Disconnected → Connected → Ready
-                           ↓
-                        (disconnect)
-                           ↓
-                     Disconnected
-```
-
-**Purpose**: Manages connection lifecycle, subscriptions, and keep-alive per TCP client.
-
-#### Device Operational FSM (Global)
-```
-Idle → Tightening → Evaluating → Idle
-  ↓                               ↑
-  └─────→ Error ──────────────────┘
-```
-
-**Purpose**: Simulates realistic device operation with timing and state transitions.
-
-#### Batch Manager (Business Logic)
-```
-counter = 0 (batch position)
-target_size = N (batch size)
-
-On OK tightening:  counter++
-On NOK tightening: counter unchanged (allows retry)
-
-Complete when: counter >= target_size
+frontend/src/
+├── routes/
+│   ├── +page.svelte           # Dashboard (/)
+│   ├── +layout.svelte         # Root layout with nav
+│   ├── control/+page.svelte   # Control panel
+│   ├── psets/+page.svelte     # PSET management
+│   └── events/+page.svelte    # Event viewer
+├── lib/
+│   ├── components/
+│   │   ├── ui/                # 22 reusable components
+│   │   ├── control/           # Control-specific components
+│   │   ├── psets/             # PSET-specific components
+│   │   ├── events/            # Event-specific components
+│   │   └── layout/            # Navigation, header, footer
+│   ├── stores/
+│   │   ├── device.ts          # Device state store
+│   │   └── websocket.ts       # WebSocket connection manager
+│   ├── api/
+│   │   └── client.ts          # HTTP API client
+│   ├── types/
+│   │   └── index.ts           # TypeScript type definitions
+│   ├── utils/
+│   │   └── logger.ts          # Logging utilities
+│   └── config/
+│       └── constants.ts       # App constants
+└── app.css                    # Global styles + Tailwind
 ```
 
-**Key behavior**: Counter only increments on OK tightenings, enabling retry workflows.
+## Usage Examples
 
-## Usage
-
-### HTTP Control API
+### HTTP REST API
 
 #### View Device State
 ```bash
@@ -188,7 +370,8 @@ Response:
   },
   "device_fsm_state": "Idle",
   "tool_enabled": true,
-  "vehicle_id": null
+  "vehicle_id": null,
+  "multi_spindle_config": null
 }
 ```
 
@@ -205,7 +388,7 @@ curl -X POST http://localhost:8081/simulate/tightening \
 
 All fields are optional (defaults: `torque=12.5`, `angle=40.0`, `ok=true`).
 
-#### Automated Tightening Simulation (Continuous Mode)
+#### Automated Tightening Simulation
 ```bash
 curl -X POST http://localhost:8081/auto-tightening/start \
   -H "Content-Type: application/json" \
@@ -217,100 +400,155 @@ curl -X POST http://localhost:8081/auto-tightening/start \
 ```
 
 Parameters:
-- `interval_ms`: Time between cycles in milliseconds (default: 3000)
-- `duration_ms`: Duration of each tightening in milliseconds (default: 1500)
+- `interval_ms`: Time between cycles (default: 3000)
+- `duration_ms`: Duration of each tightening (default: 1500)
 - `failure_rate`: Probability of NOK result, 0.0-1.0 (default: 0.1)
 
-**Behavior**: Auto-tightening runs continuously, checking for remaining bolts before each cycle:
-- If `remaining_bolts > 0`: Performs tightening
-- If `remaining_bolts == 0`: Waits for integrator to send new batch configuration (MID 0019)
-- Stops when: manually stopped via `/auto-tightening/stop` OR tool disabled (MID 0042)
+Auto-tightening runs continuously through multiple batches until stopped or tool disabled.
 
-This enables realistic multi-batch workflows where the integrator orchestrates sequential batches (different psets, different bolt counts) within the same session.
+#### PSET Management
 
-#### Stop Automated Tightening
+**List all PSETs:**
 ```bash
-curl -X POST http://localhost:8081/auto-tightening/stop
+curl http://localhost:8081/psets
 ```
 
-#### Check Auto-Tightening Status
+**Get PSET by ID:**
 ```bash
-curl http://localhost:8081/auto-tightening/status
+curl http://localhost:8081/psets/1
 ```
 
-Response:
-```json
-{
-  "running": true,
-  "counter": 2,
-  "target_size": 4,
-  "remaining_bolts": 2
-}
+**Create PSET:**
+```bash
+curl -X POST http://localhost:8081/psets \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Custom PSET",
+    "torque_min": 10.0,
+    "torque_max": 20.0,
+    "angle_min": 30.0,
+    "angle_max": 60.0,
+    "description": "Custom parameter set for testing"
+  }'
 ```
 
-### TCP Client Integration
+**Update PSET:**
+```bash
+curl -X PUT http://localhost:8081/psets/6 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated PSET",
+    "torque_min": 12.0,
+    "torque_max": 18.0
+  }'
+```
 
-#### Example: Node.js Client
+**Delete PSET:**
+```bash
+curl -X DELETE http://localhost:8081/psets/6
+```
 
+**Select Active PSET:**
+```bash
+curl -X POST http://localhost:8081/psets/2/select
+```
+
+#### Multi-Spindle Configuration
+
+```bash
+curl -X POST http://localhost:8081/config/multi-spindle \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "spindle_count": 4,
+    "sync_tightening_id": 12345
+  }'
+```
+
+Parameters:
+- `enabled`: Enable/disable multi-spindle mode
+- `spindle_count`: Number of spindles (2-16)
+- `sync_tightening_id`: Synchronization ID for coordinated tightening
+
+#### Failure Injection
+
+**Get current failure config:**
+```bash
+curl http://localhost:8081/config/failure
+```
+
+**Configure failure scenarios:**
+```bash
+curl -X POST http://localhost:8081/config/failure \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "packet_loss_rate": 0.05,
+    "latency_ms": 100,
+    "corrupt_rate": 0.02,
+    "disconnect_rate": 0.01
+  }'
+```
+
+Parameters:
+- `enabled`: Enable/disable failure injection
+- `packet_loss_rate`: Probability of dropping responses (0.0-1.0)
+- `latency_ms`: Additional latency to add to responses
+- `corrupt_rate`: Probability of corrupting message data (0.0-1.0)
+- `disconnect_rate`: Probability of disconnecting client (0.0-1.0)
+
+### WebSocket API
+
+#### Connect to Event Stream
+
+**JavaScript/TypeScript:**
 ```javascript
-const net = require('net');
+const ws = new WebSocket('ws://localhost:8081/ws/events');
 
-const client = net.createConnection({ port: 8080 }, () => {
+ws.onopen = () => {
   console.log('Connected to simulator');
+};
 
-  // Send MID 0001 - Communication start
-  const mid1 = '00200001001         001';
-  client.write(mid1 + '\0');
-});
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
 
-client.on('data', (data) => {
-  const messages = data.toString().split('\0');
-  messages.forEach(msg => {
-    if (msg.length > 0) {
-      const mid = msg.substring(4, 8);
-      console.log(`Received MID ${mid}`);
+  if (data.type === 'InitialState') {
+    console.log('Device state:', data.state);
+  } else if (data.type === 'TighteningCompleted') {
+    console.log('Tightening result:', data.result);
+  } else if (data.type === 'ToolStateChanged') {
+    console.log('Tool enabled:', data.enabled);
+  }
 
-      if (mid === '0061') {
-        // Tightening result
-        const batch_counter = parseInt(msg.substring(30, 34));
-        const status = parseInt(msg.substring(34, 35));
-        console.log(`Tightening: counter=${batch_counter}, ok=${status}`);
-      }
-    }
-  });
-});
+  // Send ping for latency measurement
+  ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
 ```
 
-#### Example: Python Client
+**Event Types:**
+- `InitialState` - Sent immediately on connection with full device state
+- `TighteningCompleted` - Sent after each tightening operation
+- `ToolStateChanged` - Sent when tool is enabled/disabled
+- `AutoTighteningProgress` - Sent during auto-tightening with progress
+- `PsetChanged` - Sent when active PSET changes
+- `VehicleIdChanged` - Sent when VIN is updated
+- `MultiSpindleResultCompleted` - Sent after multi-spindle operation
+- `MultiSpindleStatusCompleted` - Sent with multi-spindle status update
+- `BatchCompleted` - Sent when batch is completed
 
-```python
-import socket
+### Common Test Scenarios
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(('localhost', 8080))
-
-# Subscribe to tightening results (MID 60)
-mid60 = '00200060001         001'.encode() + b'\x00'
-sock.send(mid60)
-
-while True:
-    data = sock.recv(1024)
-    messages = data.split(b'\x00')
-    for msg in messages:
-        if len(msg) > 0:
-            mid = msg[4:8].decode()
-            print(f"Received MID {mid}")
-```
-
-## Testing Workflows
-
-### 1. Basic Batch Completion
+#### 1. Basic Batch Testing
 
 ```bash
 # Terminal 1: Start simulator
 cargo run
 
-# Terminal 2: Set batch size to 4
+# Terminal 2: Configure batch size (4 bolts)
 echo '0025001900100030004' | nc localhost 8080
 
 # Terminal 3: Connect client and subscribe to MID 0061
@@ -325,7 +563,7 @@ done
 
 Expected: Client receives 4 MID 0061 messages with batch_counter 1, 2, 3, 4 (last one with batch complete).
 
-### 2. Retry Workflow
+#### 2. Retry Workflow
 
 ```bash
 # Bolt 1: OK
@@ -343,7 +581,7 @@ curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": true}'
 # Continue with remaining bolts...
 ```
 
-### 3. Automated Multi-Batch Testing
+#### 3. Automated Multi-Batch Testing
 
 ```bash
 # Terminal 1: Start simulator
@@ -374,7 +612,38 @@ echo '0025001900100030008' | nc localhost 8080  # 8 bolts
 curl -X POST http://localhost:8081/auto-tightening/stop
 ```
 
-**Expected behavior**: Auto-tightening continuously processes batches as the integrator sends new configurations, simulating a realistic assembly line workflow.
+### TCP Client Integration
+
+#### Example: Node.js Client
+
+```javascript
+const net = require('net');
+
+const client = net.createConnection({ port: 8080, host: 'localhost' }, () => {
+  console.log('Connected to simulator');
+  
+  // Send MID 0001 (communication start)
+  client.write('00200001001         001\0');
+});
+
+client.on('data', (data) => {
+  console.log('Received:', data.toString());
+  
+  // Handle MID 0002 (start acknowledge), then subscribe to results
+  if (data.toString().includes('0002')) {
+    client.write('00200060001         001\0');  // Subscribe to MID 0061
+  }
+  
+  // Handle MID 0061 (tightening result)
+  if (data.toString().includes('0061')) {
+    console.log('Tightening result received!');
+  }
+});
+
+client.on('end', () => {
+  console.log('Disconnected');
+});
+```
 
 ## Open Protocol Specifics
 
@@ -437,10 +706,35 @@ Length (20 bytes)      Null terminator
 - MID 63 → Unsubscribe
 - Only subscribed clients receive MID 0061 broadcasts
 
+## Technology Stack
+
+**Backend:**
+- **Rust 1.70+** (Edition 2024)
+- **Tokio** - Async runtime for concurrent TCP connections
+- **Axum** - Web framework with WebSocket support
+- **SQLite** - Embedded database for PSET persistence
+- **r2d2** - Connection pooling for database
+- **Serde** - Serialization/deserialization
+- **Chrono** - Date/time handling
+- **Tower/Tower-HTTP** - Middleware and CORS
+
+**Frontend:**
+- **SvelteKit 2.x** - Full-stack framework with SSR
+- **Svelte 5** - Component framework with Runes API
+- **TypeScript 5.7+** - Type-safe JavaScript
+- **Tailwind CSS 3.4+** - Utility-first CSS framework
+- **Skeleton UI 2.10+** - Component library
+- **Vite 5.4+** - Build tool and dev server
+
+**Database:**
+- **SQLite 3** - Self-contained, serverless database
+- **rusqlite** - Safe SQLite bindings for Rust
+
 ## Development
 
-### Running Tests
+### Backend Development
 
+**Running Tests:**
 ```bash
 # Run all tests
 cargo test
@@ -459,8 +753,7 @@ cargo test -- --nocapture
 - Protocol parsing/serialization (8 tests)
 - Subscription handling (5 tests)
 
-### Building for Production
-
+**Building for Production:**
 ```bash
 cargo build --release
 
@@ -468,38 +761,96 @@ cargo build --release
 ./target/release/open-protocol-device-simulator
 ```
 
+**Running in Development:**
+```bash
+# With auto-reload (requires cargo-watch)
+cargo install cargo-watch
+cargo watch -x run
+
+# With debug logging
+RUST_LOG=debug cargo run
+```
+
+### Frontend Development
+
+**Development Server:**
+```bash
+cd frontend
+npm run dev
+
+# Opens on http://localhost:5173
+```
+
+**Type Checking:**
+```bash
+cd frontend
+
+# Check types
+npm run check
+
+# Watch mode
+npm run check:watch
+```
+
+**Building for Production:**
+```bash
+cd frontend
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+**Project Structure:**
+- Routes in `src/routes/` (file-based routing)
+- Components in `src/lib/components/`
+- Stores in `src/lib/stores/`
+- API client in `src/lib/api/`
+- Types in `src/lib/types/`
+
+**Key Technologies:**
+- Svelte 5 Runes: `$state`, `$derived`, `$effect`
+- TypeScript for type safety
+- Tailwind for styling
+- Skeleton UI for component library
+- WebSocket for real-time updates
+
 ### Code Quality
 
-**Architecture Patterns:**
-- TypeState pattern for compile-time state safety
-- Event-driven architecture for pub/sub
-- Dependency injection for testability
-- Clear separation of concerns (protocol/business logic/presentation)
+**Backend Architecture:**
+- **TypeState Pattern** - Compile-time state safety
+- **Event-Driven** - Pub/sub architecture for real-time updates
+- **Dependency Injection** - Testability and modularity
+- **Separation of Concerns** - Protocol/business logic/presentation layers
+- **Impossible States** - Unrepresentable invalid states
+- **No Runtime Panics** - Exhaustive error handling
 
-**Type Safety:**
-- Impossible states are unrepresentable
-- Invalid state transitions = compile errors
-- No runtime panics in critical paths
+**Frontend Architecture:**
+- **Component-Based** - Reusable UI components
+- **Type-Safe** - Full TypeScript coverage
+- **Reactive Stores** - State management with Svelte stores
+- **Error Boundaries** - Graceful error handling
+- **Accessibility** - WCAG 2.1 compliant components
 
 ## Troubleshooting
 
 ### Connection Refused
-**Issue**: Client can't connect to port 8080
+**Issue**: Client can't connect to port 8080  
 **Solution**: Check if simulator is running and firewall allows connections
 
 ### No MID 0061 Received
-**Issue**: Client subscribed but doesn't receive tightening results
+**Issue**: Client subscribed but doesn't receive tightening results  
 **Solution**:
 1. Verify subscription with MID 60 was sent
 2. Check MID 0005 acknowledgement was received
 3. Ensure tightening simulation is triggered
 
 ### Batch Counter Not Advancing
-**Issue**: Counter stays at same value after tightening
+**Issue**: Counter stays at same value after tightening  
 **Solution**: This is expected behavior on NOK tightenings. Counter only increments on OK.
 
 ### Parsing Errors
-**Issue**: Client receives corrupted MID 0061 data
+**Issue**: Client receives corrupted MID 0061 data  
 **Solution**:
 1. Verify null-byte termination is handled correctly
 2. Check field width parsing matches specification
@@ -518,49 +869,121 @@ Performance characteristics depend on hardware and workload. For production depl
 
 ## Limitations
 
+**Scope Note**: This simulator was built to cover **the simplest use case needed to verify MES integrations** during real-world development work. It implements the core functionality required for most integration scenarios but is not a complete Open Protocol implementation.
+
+**Protocol Limitations:**
+- **MID Revisions**: Only revision 1 is supported (revision 2+ features not implemented)
+- **Job System**: MID 0030-0039 (Job management) is not implemented
+- **Link-Layer**: Application-level acknowledgement only (no link-layer)
+- **Advanced Features**: Many specialized features not yet implemented
+
 **Not Yet Implemented:**
-- Link-layer acknowledgement (only application-level)
-- Multi-spindle coordination (MID 0090-0103) - *design document available in `docs/multi-spindle-brd-tdd.md`*
 - Advanced job management (MID 0030-0039)
 - Alarm subscriptions (MID 0070-0078)
 - Result uploads (MID 0064-0065)
 - Time setting (MID 0080-0081)
 - Tool configuration (MID 0011-0013)
 - Advanced torque/angle curve data
+- Frontend authentication/authorization
+- MID revision 2+ features (identifier fields, extended data)
 
-These features can be added as needed for specific integration requirements. See `docs/` directory for planned features.
+**What IS Implemented:**
+The simulator handles the **80% use case** for integration testing:
+- Communication lifecycle (start/stop/keepalive)
+- Tightening results with batch management
+- Parameter set management with persistence
+- Multi-spindle coordination
+- Vehicle ID handling
+- Tool enable/disable
+- Real-time event streaming
+
+These features cover most integration scenarios. Additional MIDs and features can be added as needed - the architecture is designed to be extensible. See `docs/` directory for design documents.
+
+**Implemented Features:**
+- ✅ Multi-spindle coordination (MID 0090-0103)
+- ✅ WebSocket support for real-time events
+- ✅ PSET management with database persistence
+- ✅ Failure injection for testing resilience
+- ✅ Modern web dashboard
 
 ## Documentation
 
-Additional documentation is available in the `docs/` directory:
+Additional documentation is available in the project:
 
-- **`docs/multi-spindle-brd-tdd.md`** - Complete design document for multi-spindle mode implementation (MID 0090-0103)
-- **`docs/multi-device-simulation.md`** - Discussion about simulating multiple physical devices in one process (shelved feature)
+**Design Documents:**
+- **`DESIGN_SYSTEM.md`** - Complete UI/UX design system and component library reference
+- **`docs/multi-spindle-brd-tdd.md`** - Design document for multi-spindle mode (now implemented)
+- **`docs/multi-device-simulation.md`** - Discussion about simulating multiple physical devices (shelved feature)
 
-These documents provide detailed specifications for features that can be implemented as needed.
+**Code Documentation:**
+- Inline Rust documentation: `cargo doc --open`
+- TypeScript types in `frontend/src/lib/types/`
 
 ## Contributing
 
 Contributions are welcome! Areas for enhancement:
-- Multi-spindle mode implementation (see `docs/multi-spindle-brd-tdd.md`)
-- Additional MID implementations
+
+**High Priority:**
+- Frontend authentication/authorization
+- More MID implementations (job management, alarms, result uploads)
 - More realistic torque/angle curve simulation
-- WebSocket support for browser-based clients
-- Configuration file support
-- Metrics and monitoring endpoints
+- Configuration file support (YAML/TOML)
+- Metrics and monitoring endpoints (Prometheus)
+
+**Medium Priority:**
+- Link-layer acknowledgement
+- Time setting (MID 0080-0081)
+- Tool configuration (MID 0011-0013)
+- Frontend E2E tests (Playwright)
+- Backend integration tests for multi-spindle
+
+**Documentation:**
+- Video tutorials
+- Integration examples (Python, C#, Java clients)
+- Docker deployment guide
+
+Please open an issue to discuss major changes before submitting a PR.
+
+## About Open Protocol
+
+**Open Protocol** is an industry-standard communication protocol for tightening controllers, led by Atlas Copco but implemented by many manufacturers including Desoutter, Stanley, Cleco, and others. This simulator is not affiliated with or endorsed by Atlas Copco or any other manufacturer - it's an independent implementation of the publicly available specification.
 
 ## License
 
-[Specify your license here]
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## Support
 
 For issues, questions, or contributions:
-- GitHub Issues: [repository-url]/issues
-- Documentation: Atlas Copco Open Protocol Specification R2.8.0+
+- **GitHub Issues**: [https://github.com/YOUR_USERNAME/open-protocol-simulator/issues](https://github.com/YOUR_USERNAME/open-protocol-simulator/issues)
+- **Documentation**: Atlas Copco Open Protocol Specification R2.8.0+
 
 ## References
 
+**Open Protocol:**
 - [Atlas Copco Open Protocol Specification](https://s3.amazonaws.com/co.tulip.cdn/OpenProtocolSpecification_R280.pdf)
 - [Open Protocol Community Implementations](https://github.com/st-one-io/node-open-protocol)
-- [Industrial Assembly Best Practices](https://www.atlascopco.com/en-us/itba/products/bolt-tightening-solutions)
+
+**Backend Technologies:**
+- [Tokio Async Runtime](https://tokio.rs/)
+- [Axum Web Framework](https://github.com/tokio-rs/axum)
+- [SQLite Database](https://www.sqlite.org/)
+
+**Frontend Technologies:**
+- [SvelteKit Framework](https://kit.svelte.dev/)
+- [Svelte 5 Documentation](https://svelte.dev/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Skeleton UI](https://www.skeleton.dev/)
+
+---
+
+**Built by someone who got tired of waiting for hardware to test MES integrations. Now with a modern web interface. 🔧✨**

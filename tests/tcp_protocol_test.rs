@@ -1,6 +1,8 @@
 mod common;
 
-use open_protocol_device_simulator::{DeviceState, SimulatorEvent, ObservableState, handler, protocol};
+use open_protocol_device_simulator::{
+    DeviceState, ObservableState, SimulatorEvent, handler, protocol,
+};
 use std::sync::{Arc, RwLock};
 
 /// Test MID 0001 - Communication Start

@@ -31,7 +31,10 @@ async fn send_with_failure_injection(
 
     // Check if failure injection is enabled
     if !failure_config.enabled {
-        return framed.send(message_bytes.as_slice().into()).await.map(|_| true);
+        return framed
+            .send(message_bytes.as_slice().into())
+            .await
+            .map(|_| true);
     }
 
     // Make all random decisions first (before any awaits to avoid Send issues with ThreadRng)
