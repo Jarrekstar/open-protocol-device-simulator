@@ -10,7 +10,7 @@
 
 ## The Problem
 
-Integrating tightening tools (Atlas Copco, Desoutter, Stanley, etc.) into Manufacturing Execution Systems requires extensive testing. Physical controllers are expensive, often unavailable during development, and difficult to use for simulating edge cases, error conditions, and high-volume scenarios.
+Integrating tightening tools into Manufacturing Execution Systems requires extensive testing. Physical controllers are expensive, often unavailable during development, and difficult to use for simulating edge cases, error conditions, and high-volume scenarios.
 
 ## The Solution
 
