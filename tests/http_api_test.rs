@@ -101,7 +101,7 @@ async fn test_tightening_simulation() {
         job_id: 1,
         pset_id: 1,
         batch_size: 5,
-        batch_counter: tightening_info.counter as u32,
+        batch_counter: tightening_info.counter,
         tightening_status: true,
         torque_status: true,
         angle_status: true,
@@ -116,7 +116,7 @@ async fn test_tightening_simulation() {
         timestamp: "2024-01-01 12:00:00".to_string(),
         last_pset_change: None,
         batch_status: None,
-        tightening_id: Some(tightening_info.tightening_id as u32),
+        tightening_id: Some(tightening_info.tightening_id),
     };
 
     // Broadcast the tightening completed event
