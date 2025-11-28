@@ -148,7 +148,7 @@ mod tests {
     fn test_device_state_creation() {
         let state = DeviceState::new();
         assert_eq!(state.cell_id, 1);
-        assert_eq!(state.tool_enabled, true);
+        assert!(state.tool_enabled);
         assert_eq!(state.tightening_tracker.counter(), 0);
     }
 
@@ -169,9 +169,9 @@ mod tests {
     fn test_tool_state() {
         let mut state = DeviceState::new();
         state.disable_tool();
-        assert_eq!(state.tool_enabled, false);
+        assert!(!state.tool_enabled);
         state.enable_tool();
-        assert_eq!(state.tool_enabled, true);
+        assert!(state.tool_enabled);
     }
 
     #[test]

@@ -3,6 +3,12 @@ use tokio_util::bytes::BufMut;
 
 pub struct NullDelimitedCodec;
 
+impl Default for NullDelimitedCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NullDelimitedCodec {
     pub fn new() -> Self {
         NullDelimitedCodec {}

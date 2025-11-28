@@ -59,6 +59,7 @@ fn get_tightening_params(
 }
 
 /// Helper function to build a TighteningResult from device state and tightening info
+#[allow(clippy::too_many_arguments)]
 fn build_tightening_result(
     state: &DeviceState,
     info: &crate::batch_manager::TighteningInfo,
@@ -450,11 +451,9 @@ async fn start_auto_tightening(
             }
 
             // Log remaining work (only meaningful in batch mode)
-            if let Some(remaining_bolts) = remaining {
-                if remaining_bolts == 0 {
-                    tokio::time::sleep(Duration::from_millis(interval_ms)).await;
-                    continue;
-                }
+            if let Some(0) = remaining {
+                tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+                continue;
             }
 
             // ================================================================
@@ -1008,12 +1007,10 @@ async fn handle_websocket(socket: WebSocket, server_state: ServerState) {
             match msg {
                 Message::Text(text) => {
                     // Try to parse as JSON to check if it's a ping message
-                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if value.get("type").and_then(|t| t.as_str()) == Some("ping") {
-                            // Send pong response
-                            let pong_msg = r#"{"type":"pong"}"#.to_string();
-                            let _ = pong_tx.send(pong_msg).await;
-                        }
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) && value.get("type").and_then(|t| t.as_str()) == Some("ping") {
+                        // Send pong response
+                        let pong_msg = r#"{"type":"pong"}"#.to_string();
+                        let _ = pong_tx.send(pong_msg).await;
                     }
                 }
                 Message::Close(_) => {

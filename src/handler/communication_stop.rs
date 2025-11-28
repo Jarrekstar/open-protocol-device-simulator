@@ -6,6 +6,12 @@ use crate::protocol::{Message, Response};
 /// Responds with MID 0005 (Command accepted)
 pub struct CommunicationStopHandler;
 
+impl Default for CommunicationStopHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommunicationStopHandler {
     pub fn new() -> Self {
         Self

@@ -1,24 +1,23 @@
 use serde::Serialize;
 use std::time::{Duration, Instant};
 
-/// Device operational states using typestate pattern
-///
-/// This FSM represents the operational lifecycle of a tightening device:
-/// Idle → Tightening → Evaluating → Idle (or Error)
-///
-/// # Example
-/// ```ignore
-/// let fsm = DeviceFSM::new();
-/// let fsm = fsm.start_tightening(params);
-/// // ... wait for completion ...
-/// let fsm = fsm.complete();
-/// let result = fsm.result();
-/// let fsm = fsm.finish(); // back to Idle
-/// ```
-
 // ============================================================================
 // State marker types
 // ============================================================================
+// Device operational states using typestate pattern
+//
+// This FSM represents the operational lifecycle of a tightening device:
+// Idle → Tightening → Evaluating → Idle (or Error)
+//
+// # Example
+// ```ignore
+// let fsm = DeviceFSM::new();
+// let fsm = fsm.start_tightening(params);
+// // ... wait for completion ...
+// let fsm = fsm.complete();
+// let result = fsm.result();
+// let fsm = fsm.finish(); // back to Idle
+// ```
 
 /// Idle state - device is waiting for a tightening operation
 pub struct Idle;
@@ -414,8 +413,8 @@ mod tests {
 
         // Tightening → Evaluating
         let fsm = fsm.complete();
-        let result = fsm.result();
-        assert!(result.ok || !result.ok); // Either outcome is valid
+        let _result = fsm.result();
+        // Either outcome (ok or not ok) is valid for this test
 
         // Evaluating → Idle
         let _fsm = fsm.finish();
@@ -468,7 +467,7 @@ mod tests {
         let snapshot = DeviceFSMState::idle();
 
         match snapshot {
-            DeviceFSMState::Idle => assert!(true),
+            DeviceFSMState::Idle => {} // Expected
             _ => panic!("Expected Idle state"),
         }
     }
@@ -509,10 +508,8 @@ mod tests {
                 angle_ok,
                 ..
             } => {
-                // All should be boolean
-                assert!(ok == true || ok == false);
-                assert!(torque_ok == true || torque_ok == false);
-                assert!(angle_ok == true || angle_ok == false);
+                // All should be boolean - verified by type system
+                let _ = (ok, torque_ok, angle_ok);
             }
             _ => panic!("Expected Evaluating state"),
         }

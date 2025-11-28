@@ -277,7 +277,7 @@ pub fn generate_multi_spindle_results(
         let angle = base_angle + (variation * 2);
 
         // Simulate 90% success rate (last spindle might fail occasionally)
-        let is_ok = spindle_id != config.spindle_count || result_id % 10 != 0;
+        let is_ok = spindle_id != config.spindle_count || !result_id.is_multiple_of(10);
 
         let result = if is_ok {
             SpindleResult::ok(spindle_id, torque, angle)

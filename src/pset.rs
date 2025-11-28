@@ -278,15 +278,13 @@ impl PsetRepository for SqlitePsetRepository {
             }
         };
 
-        let result = match stmt.query_map([], Self::row_to_pset) {
+        match stmt.query_map([], Self::row_to_pset) {
             Ok(rows) => rows.filter_map(Result::ok).collect(),
             Err(e) => {
                 eprintln!("Query failed: {}", e);
                 vec![]
             }
-        };
-
-        result
+        }
     }
 
     fn get_by_id(&self, id: u32) -> Option<Pset> {
