@@ -73,7 +73,6 @@
 			<div class="relative">
 				<svg
 					class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400"
-					fill="none"
 					viewBox="0 0 24 24"
 					stroke="currentColor"
 				>
