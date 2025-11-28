@@ -83,8 +83,8 @@ Real-time event stream with filtering, search, and multiple view modes for debug
 ### Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/open-protocol-simulator
-cd open-protocol-simulator
+git clone https://github.com/Jarrekstar/open-protocol-device-simulator
+cd open-protocol-device-simulator
 
 # Build backend
 cargo build --release
@@ -964,7 +964,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 ## Support
 
 For issues, questions, or contributions:
-- **GitHub Issues**: [https://github.com/YOUR_USERNAME/open-protocol-simulator/issues](https://github.com/YOUR_USERNAME/open-protocol-simulator/issues)
+- **GitHub Issues**: [https://github.com/Jarrekstar/open-protocol-device-simulator/issues](https://github.com/Jarrekstar/open-protocol-device-simulator/issues)
 - **Documentation**: Atlas Copco Open Protocol Specification R2.8.0+
 
 ## References

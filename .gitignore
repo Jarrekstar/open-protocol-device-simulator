@@ -25,3 +25,51 @@ target
 
 /target
 simulator.db
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json.backup
+
+# Environment files (CRITICAL)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Frontend build output
+frontend/build/
+frontend/.svelte-kit/
+frontend/dist/
+frontend/.turbo/
+
+# Testing
+coverage/
+*.lcov
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+Desktop.ini
