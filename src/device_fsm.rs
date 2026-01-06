@@ -1,24 +1,6 @@
 use serde::Serialize;
 use std::time::{Duration, Instant};
 
-// ============================================================================
-// State marker types
-// ============================================================================
-// Device operational states using typestate pattern
-//
-// This FSM represents the operational lifecycle of a tightening device:
-// Idle → Tightening → Evaluating → Idle (or Error)
-//
-// # Example
-// ```ignore
-// let fsm = DeviceFSM::new();
-// let fsm = fsm.start_tightening(params);
-// // ... wait for completion ...
-// let fsm = fsm.complete();
-// let result = fsm.result();
-// let fsm = fsm.finish(); // back to Idle
-// ```
-
 /// Idle state - device is waiting for a tightening operation
 pub struct Idle;
 
