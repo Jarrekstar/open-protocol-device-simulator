@@ -3,6 +3,7 @@ import { deviceState } from './device';
 import { addEvent } from './events';
 import { addTighteningResult, autoTighteningProgress } from './tightening';
 import { WEBSOCKET } from '$lib/config/constants';
+import { getWebSocketUrl } from '$lib/config/env';
 import { logger } from '$lib/utils';
 import type { SimulatorEvent, DeviceState, MultiSpindleConfig, FailureConfig } from '$lib/types';
 
@@ -277,9 +278,9 @@ function dispatchEvent(event: SimulatorEvent): void {
 /**
  * Establishes WebSocket connection with automatic reconnection
  * Uses exponential backoff with a maximum of 10 attempts
- * @param url - WebSocket endpoint URL (default: ws://localhost:8081/ws/events)
+ * @param url - WebSocket endpoint URL (default: derived from environment or localhost:8081)
  */
-export function connectWebSocket(url: string = 'ws://localhost:8081/ws/events') {
+export function connectWebSocket(url: string = getWebSocketUrl()) {
 	// Prevent multiple instances
 	if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
 		logger.info('WebSocket already connected or connecting');

@@ -1,6 +1,7 @@
 // Library exports for integration testing
 pub mod batch_manager;
 pub mod codec;
+pub mod config;
 pub mod device_fsm;
 pub mod events;
 pub mod failure_simulator;

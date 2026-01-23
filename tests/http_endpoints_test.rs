@@ -13,14 +13,14 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn test_get_state_endpoint() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
 
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let response = app
         .oneshot(
@@ -49,7 +49,7 @@ async fn test_get_state_endpoint() {
 #[tokio::test]
 async fn test_simulate_tightening_endpoint() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
@@ -60,7 +60,7 @@ async fn test_simulate_tightening_endpoint() {
 
     let (broadcaster, _receiver) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let payload = json!({
         "torque": 12.5,
@@ -94,13 +94,13 @@ async fn test_simulate_tightening_endpoint() {
 #[tokio::test]
 async fn test_start_auto_tightening_endpoint() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let payload = json!({
         "interval_ms": 1000,
@@ -134,7 +134,7 @@ async fn test_start_auto_tightening_endpoint() {
 #[tokio::test]
 async fn test_start_auto_tightening_conflict() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
     use std::sync::atomic::AtomicBool;
 
@@ -148,6 +148,7 @@ async fn test_start_auto_tightening_conflict() {
         observable_state,
         auto_tightening_active: Arc::new(AtomicBool::new(true)), // Already running
         pset_repository,
+        settings: config::Settings::default(),
     };
 
     let app = axum::Router::new()
@@ -189,13 +190,13 @@ async fn test_start_auto_tightening_conflict() {
 #[tokio::test]
 async fn test_stop_auto_tightening_endpoint() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let response = app
         .oneshot(
@@ -221,13 +222,13 @@ async fn test_stop_auto_tightening_endpoint() {
 #[tokio::test]
 async fn test_get_auto_tightening_status_endpoint() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let response = app
         .oneshot(
@@ -254,13 +255,13 @@ async fn test_get_auto_tightening_status_endpoint() {
 #[tokio::test]
 async fn test_configure_multi_spindle_enable() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let payload = json!({
         "enabled": true,
@@ -301,7 +302,7 @@ async fn test_configure_multi_spindle_enable() {
 #[tokio::test]
 async fn test_configure_multi_spindle_disable() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
@@ -312,7 +313,7 @@ async fn test_configure_multi_spindle_disable() {
 
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let payload = json!({
         "enabled": false
@@ -348,13 +349,13 @@ async fn test_configure_multi_spindle_disable() {
 #[tokio::test]
 async fn test_configure_multi_spindle_invalid() {
     use open_protocol_device_simulator::{
-        DeviceState, ObservableState, SimulatorEvent, http_server,
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
     };
 
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
-    let app = http_server::create_router(observable_state);
+    let app = http_server::create_router(observable_state, config::Settings::default());
 
     let payload = json!({
         "enabled": true,

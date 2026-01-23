@@ -7,8 +7,9 @@ import type {
 	FailureConfigRequest,
 	Pset
 } from '$lib/types';
+import { getApiBaseUrl } from '$lib/config/env';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
+const API_BASE = getApiBaseUrl();
 
 /**
  * API client for communicating with the device simulator backend

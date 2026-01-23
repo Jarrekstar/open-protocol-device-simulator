@@ -1,0 +1,52 @@
+# Open Protocol Device Simulator Configuration
+#
+# This file demonstrates all available configuration options.
+# Copy to config.toml and modify as needed.
+#
+# Configuration priority (highest to lowest):
+# 1. CLI arguments (e.g., --tcp-port 9080)
+# 2. Environment variables (e.g., SIMULATOR_TCP_PORT=9080)
+# 3. Config file (this file)
+# 4. Hardcoded defaults
+
+[server]
+# TCP port for Open Protocol connections
+tcp_port = 8080
+
+# HTTP port for REST API and WebSocket
+http_port = 8081
+
+# Bind address for all listeners
+# Use "0.0.0.0" to listen on all interfaces
+# Use "127.0.0.1" to restrict to localhost
+bind_address = "0.0.0.0"
+
+# Capacity of the event broadcast channel
+event_channel_capacity = 100
+
+[device]
+# Cell ID reported in Open Protocol messages
+cell_id = 1
+
+# Channel ID reported in Open Protocol messages
+channel_id = 1
+
+# Controller name reported in Open Protocol messages
+controller_name = "OpenProtocolSimulator"
+
+# Supplier code reported in Open Protocol messages
+supplier_code = "SIM"
+
+[database]
+# Path to SQLite database file for PSET storage
+path = "simulator.db"
+
+[defaults]
+# Default interval between auto-tightening cycles (milliseconds)
+auto_tightening_interval_ms = 3000
+
+# Default duration of each tightening operation (milliseconds)
+auto_tightening_duration_ms = 1500
+
+# Default failure rate for auto-tightening (0.0 = never fail, 1.0 = always fail)
+failure_rate = 0.1

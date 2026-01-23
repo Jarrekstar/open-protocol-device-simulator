@@ -1,3 +1,4 @@
+use crate::config::Settings;
 use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
 use crate::events::SimulatorEvent;
 use crate::failure_simulator::FailureConfig;
@@ -29,6 +30,7 @@ pub struct ServerState {
     pub observable_state: ObservableState,
     pub auto_tightening_active: Arc<AtomicBool>,
     pub pset_repository: SharedPsetRepository,
+    pub settings: Settings,
 }
 
 /// Get TighteningParams from selected PSET, or default if no PSET selected
@@ -105,20 +107,27 @@ fn build_tightening_result(
 }
 
 /// Create the HTTP router with all endpoints configured
-pub fn create_router(observable_state: ObservableState) -> Router {
-    let pset_repository =
-        crate::pset::create_sqlite_repository("simulator.db").unwrap_or_else(|e| {
-            eprintln!(
-                "Failed to create SQLite repository: {}. Falling back to in-memory.",
-                e
-            );
-            crate::pset::create_default_repository()
-        });
+pub fn create_router(observable_state: ObservableState, settings: Settings) -> Router {
+    let db_path = settings.database.path.to_str().unwrap_or_else(|| {
+        eprintln!(
+            "Warning: Database path {:?} is not valid UTF-8, falling back to 'simulator.db'",
+            settings.database.path
+        );
+        "simulator.db"
+    });
+    let pset_repository = crate::pset::create_sqlite_repository(db_path).unwrap_or_else(|e| {
+        eprintln!(
+            "Failed to create SQLite repository: {}. Falling back to in-memory.",
+            e
+        );
+        crate::pset::create_default_repository()
+    });
 
     let server_state = ServerState {
         observable_state,
         auto_tightening_active: Arc::new(AtomicBool::new(false)),
         pset_repository,
+        settings,
     };
 
     let cors = CorsLayer::new()
@@ -149,14 +158,18 @@ pub fn create_router(observable_state: ObservableState) -> Router {
 }
 
 /// Start the HTTP server for state inspection and simulation control
-pub async fn start_http_server(observable_state: ObservableState) {
-    let app = create_router(observable_state);
+pub async fn start_http_server(observable_state: ObservableState, settings: Settings) {
+    let bind_addr = format!(
+        "{}:{}",
+        settings.server.bind_address, settings.server.http_port
+    );
+    let app = create_router(observable_state, settings);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
+    let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
-        .expect("Failed to bind HTTP server to port 8081");
+        .unwrap_or_else(|_| panic!("Failed to bind HTTP server to {}", bind_addr));
 
-    println!("HTTP state server listening on http://0.0.0.0:8081");
+    println!("HTTP state server listening on http://{}", bind_addr);
     println!("Endpoints:");
     println!("  GET    /state                     - View device state");
     println!("  POST   /simulate/tightening       - Simulate a single tightening operation");
@@ -356,26 +369,13 @@ async fn simulate_tightening(
 
 #[derive(Deserialize)]
 struct AutoTighteningRequest {
-    /// Time between tightening cycles in milliseconds
-    #[serde(default = "default_interval")]
-    interval_ms: u64,
-    /// Duration of each tightening operation in milliseconds
-    #[serde(default = "default_duration")]
-    duration_ms: u64,
-    /// Probability of failure (0.0 = never fail, 1.0 = always fail)
-    #[serde(default = "default_failure_rate")]
-    failure_rate: f64,
+    /// Time between tightening cycles in milliseconds (uses config default if not specified)
+    interval_ms: Option<u64>,
+    /// Duration of each tightening operation in milliseconds (uses config default if not specified)
+    duration_ms: Option<u64>,
+    /// Probability of failure (0.0 = never fail, 1.0 = always fail, uses config default if not specified)
+    failure_rate: Option<f64>,
 }
-
-fn default_interval() -> u64 {
-    3000
-} // 3 seconds between cycles
-fn default_duration() -> u64 {
-    1500
-} // 1.5 second tightening
-fn default_failure_rate() -> f64 {
-    0.1
-} // 10% failure rate
 
 #[derive(Serialize)]
 struct AutoTighteningResponse {
@@ -404,9 +404,18 @@ async fn start_auto_tightening(
         );
     }
 
-    let interval_ms = payload.interval_ms;
-    let duration_ms = payload.duration_ms;
-    let failure_rate = payload.failure_rate.clamp(0.0, 1.0);
+    // Use request values or fall back to configuration defaults
+    let defaults = &server_state.settings.defaults;
+    let interval_ms = payload
+        .interval_ms
+        .unwrap_or(defaults.auto_tightening_interval_ms);
+    let duration_ms = payload
+        .duration_ms
+        .unwrap_or(defaults.auto_tightening_duration_ms);
+    let failure_rate = payload
+        .failure_rate
+        .unwrap_or(defaults.failure_rate)
+        .clamp(0.0, 1.0);
 
     // Clone observable state for background task
     let observable_state = server_state.observable_state.clone();

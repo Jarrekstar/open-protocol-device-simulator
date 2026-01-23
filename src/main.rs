@@ -1,12 +1,13 @@
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use open_protocol_device_simulator::{
-    codec, events, failure_simulator, handler, http_server, observable_state, protocol, session,
-    state,
+    codec, config, events, failure_simulator, handler, http_server, observable_state, protocol,
+    session, state,
 };
 use std::sync::Arc;
 use thiserror::Error;
 
+use config::Settings;
 use events::SimulatorEvent;
 use failure_simulator::FailureSimulator;
 use observable_state::ObservableState;
@@ -90,25 +91,34 @@ async fn send_with_failure_injection(
 
 #[tokio::main]
 async fn main() {
-    serve_tcp_client().await.unwrap();
+    let settings = config::load_config().expect("Failed to load configuration");
+    serve_tcp_client(settings).await.unwrap();
 }
 
-async fn serve_tcp_client() -> Result<(), ServeError> {
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
+    let bind_addr = format!(
+        "{}:{}",
+        settings.server.bind_address, settings.server.tcp_port
+    );
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
-    // Create device state (shared across all connections)
-    let device_state = DeviceState::new_shared();
+    println!("Open Protocol TCP server listening on {}", bind_addr);
 
-    // Create event broadcast channel (capacity of 100 events)
-    let (event_tx, _event_rx) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    // Create device state from configuration (shared across all connections)
+    let device_state = DeviceState::new_shared_from_config(&settings.device);
+
+    // Create event broadcast channel
+    let (event_tx, _event_rx) =
+        tokio::sync::broadcast::channel::<SimulatorEvent>(settings.server.event_channel_capacity);
 
     // Create observable state wrapper that broadcasts events on state changes
     let observable_state = ObservableState::new(device_state, event_tx.clone());
 
     // Spawn HTTP server for state inspection and event generation
     let http_observable = observable_state.clone();
+    let http_settings = settings.clone();
     tokio::spawn(async move {
-        http_server::start_http_server(http_observable).await;
+        http_server::start_http_server(http_observable, http_settings).await;
     });
 
     // Create handler registry (shared across all connections)

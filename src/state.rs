@@ -1,3 +1,4 @@
+use crate::config::DeviceConfig;
 use crate::device_fsm::DeviceFSMState;
 use crate::failure_simulator::FailureConfig;
 use crate::multi_spindle::MultiSpindleConfig;
@@ -58,9 +59,33 @@ impl DeviceState {
         }
     }
 
+    /// Create a new device state from configuration
+    pub fn new_from_config(config: &DeviceConfig) -> Self {
+        Self {
+            cell_id: config.cell_id,
+            channel_id: config.channel_id,
+            controller_name: config.controller_name.clone(),
+            supplier_code: config.supplier_code.clone(),
+            current_pset_id: Some(1),
+            current_pset_name: Some("Default".to_string()),
+            tightening_tracker: TighteningTracker::new(),
+            device_fsm_state: DeviceFSMState::idle(),
+            tool_enabled: true,
+            vehicle_id: None,
+            current_job_id: Some(1),
+            multi_spindle_config: MultiSpindleConfig::default(),
+            failure_config: FailureConfig::default(),
+        }
+    }
+
     /// Create a thread-safe shared state
     pub fn new_shared() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self::new()))
+    }
+
+    /// Create a thread-safe shared state from configuration
+    pub fn new_shared_from_config(config: &DeviceConfig) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self::new_from_config(config)))
     }
 
     /// Set the parameter set
