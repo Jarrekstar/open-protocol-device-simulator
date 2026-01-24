@@ -683,6 +683,17 @@ async fn start_auto_tightening(
 
         // Reset active flag when loop exits
         auto_active.store(false, Ordering::Relaxed);
+
+        // Broadcast stopped status so frontend updates
+        let (counter, target_size) = {
+            let state = observable_state.read();
+            (
+                state.tightening_tracker.counter(),
+                state.tightening_tracker.batch_size(),
+            )
+        };
+        observable_state.broadcast_auto_progress(counter, target_size, false);
+
         println!("Automated tightening stopped");
     });
 
