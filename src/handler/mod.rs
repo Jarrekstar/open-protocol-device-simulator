@@ -1,3 +1,5 @@
+pub mod batch_increment;
+pub mod batch_reset;
 pub mod batch_size;
 pub mod communication_start;
 pub mod communication_stop;
@@ -105,6 +107,16 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
     registry.register(
         19,
         Box::new(batch_size::BatchSizeHandler::new(Arc::clone(state))),
+    );
+    registry.register(
+        20,
+        Box::new(batch_reset::BatchResetHandler::new(Arc::clone(state))),
+    );
+    registry.register(
+        128,
+        Box::new(batch_increment::BatchIncrementHandler::new(Arc::clone(
+            state,
+        ))),
     );
     registry.register(
         42,

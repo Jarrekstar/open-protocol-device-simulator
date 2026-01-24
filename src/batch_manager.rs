@@ -84,9 +84,8 @@ impl BatchManager {
     /// Reset the batch for a new cycle
     ///
     /// Batch lifecycle management method.
-    /// Used by webUI "Reset Batch" button to manually reset batch state
-    /// without changing size, and by HTTP API endpoints for batch control.
-    #[allow(dead_code)]
+    /// Used by MID 0020 to reset batch counter at runtime,
+    /// webUI "Reset Batch" button, and HTTP API endpoints.
     pub fn reset(&mut self) {
         self.counter = 0;
         self.completed = false;
@@ -135,6 +134,17 @@ impl BatchManager {
     /// Get the target batch size
     pub fn target_size(&self) -> u32 {
         self.target_size
+    }
+
+    /// Increment the batch counter without a tightening result.
+    /// Used by MID 0020 to skip a bolt position (e.g., after max retries).
+    /// Returns the new counter value.
+    pub fn increment(&mut self) -> u32 {
+        self.counter += 1;
+        if self.counter >= self.target_size {
+            self.completed = true;
+        }
+        self.counter
     }
 }
 

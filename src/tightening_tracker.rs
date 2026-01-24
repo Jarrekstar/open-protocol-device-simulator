@@ -125,6 +125,29 @@ impl TighteningTracker {
     pub fn tightening_sequence(&self) -> u32 {
         self.tightening_sequence
     }
+
+    /// Increment the batch counter without a tightening result (MID 0128).
+    /// Used to skip a bolt position (e.g., after max retries on integrator side).
+    /// Returns the new counter value, or 0 if not in batch mode.
+    pub fn increment_batch(&mut self) -> u32 {
+        match &mut self.mode {
+            TighteningMode::Single => 0, // No-op in single mode
+            TighteningMode::Batch(batch_manager) => batch_manager.increment(),
+        }
+    }
+
+    /// Reset the batch counter (MID 0020).
+    /// Resets the counter to 0 without changing batch size.
+    /// Returns true if in batch mode, false if in single mode.
+    pub fn reset_batch(&mut self) -> bool {
+        match &mut self.mode {
+            TighteningMode::Single => false, // No-op in single mode
+            TighteningMode::Batch(batch_manager) => {
+                batch_manager.reset();
+                true
+            }
+        }
+    }
 }
 
 impl Default for TighteningTracker {

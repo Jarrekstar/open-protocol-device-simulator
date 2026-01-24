@@ -99,6 +99,17 @@ impl DeviceState {
         self.tightening_tracker.enable_batch(size);
     }
 
+    /// Increment batch counter without tightening (MID 0128 - skip bolt)
+    pub fn increment_batch(&mut self) -> u32 {
+        self.tightening_tracker.increment_batch()
+    }
+
+    /// Reset batch counter (MID 0020)
+    /// Returns true if in batch mode, false otherwise
+    pub fn reset_batch(&mut self) -> bool {
+        self.tightening_tracker.reset_batch()
+    }
+
     /// Enable the tool
     pub fn enable_tool(&mut self) {
         self.tool_enabled = true;

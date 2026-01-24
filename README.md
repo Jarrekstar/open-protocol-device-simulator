@@ -189,6 +189,10 @@ Implements the most commonly used MIDs from the Open Protocol specification:
 - ✅ **MID 0014/0015/0016** - PSET subscription/broadcast/unsubscribe
 - ✅ **MID 0018** - Parameter set selection
 - ✅ **MID 0019** - Batch size configuration
+- ✅ **MID 0020** - Reset batch counter
+
+**Job Management:**
+- ✅ **MID 0128** - Job batch increment (skip bolt position)
 
 **Tightening Results:**
 - ✅ **MID 0060/0061/0062/0063** - Result subscription/broadcast/ack/unsubscribe
@@ -305,7 +309,8 @@ src/
 ├── handler/
 │   ├── mod.rs                 # Handler registry
 │   ├── communication_*.rs     # MID 0001-0005
-│   ├── pset_*.rs              # MID 0014-0019
+│   ├── pset_*.rs              # MID 0014-0018
+│   ├── batch_*.rs             # MID 0019-0020, 0128
 │   ├── tool_*.rs              # MID 0042-0043
 │   ├── vehicle_id*.rs         # MID 0050-0053
 │   ├── tightening_*.rs        # MID 0060-0063
@@ -583,7 +588,24 @@ curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": true}'
 # Continue with remaining bolts...
 ```
 
-#### 3. Automated Multi-Batch Testing
+#### 3. Skip Bolt After Max Retries
+
+When the integrator decides to skip a bolt (e.g., after max retry attempts):
+
+```bash
+# Bolt fails multiple times
+curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": false}'
+curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": false}'
+curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": false}'
+
+# Integrator decides to skip - sends MID 0128 (Job batch increment)
+echo '00200128001         ' | nc localhost 8080
+
+# Counter is now incremented, continue with next bolt
+curl -X POST http://localhost:8081/simulate/tightening -d '{"ok": true}'
+```
+
+#### 4. Automated Multi-Batch Testing
 
 ```bash
 # Terminal 1: Start simulator
@@ -696,6 +718,12 @@ Length (20 bytes)      Null terminator
 - Sending MID 0019 (set batch size) ALWAYS resets the batch (counter → 0)
 - This is true even if sending the same size as before
 - Enables sequential batches with same bolt count (e.g., 4 engine bolts, then 4 suspension bolts)
+- MID 0020 resets counter to 0 without changing batch size
+
+**Batch Skip (MID 0128):**
+- MID 0128 increments the batch counter without a tightening result
+- Used when integrator decides to skip a bolt (e.g., after max retry attempts)
+- Keeps simulator counter in sync with integrator's bolt count
 
 **Tool Lock Control:**
 - Device does NOT auto-lock on NOK
@@ -748,12 +776,16 @@ cargo test test_batch_with_nok
 cargo test -- --nocapture
 ```
 
-**Test Coverage**: 56 tests covering:
+**Test Coverage**: 149 tests covering:
 - Batch manager logic (10 tests)
 - Device FSM transitions (9 tests)
 - Session management (13 tests)
 - Protocol parsing/serialization (8 tests)
 - Subscription handling (5 tests)
+- Handler tests (40+ tests)
+- HTTP endpoint tests (9 tests)
+- TCP protocol tests (15 tests)
+- Integration tests (14 tests)
 
 **Building for Production:**
 ```bash
@@ -880,7 +912,7 @@ Performance characteristics depend on hardware and workload. For production depl
 - **Advanced Features**: Many specialized features not yet implemented
 
 **Not Yet Implemented:**
-- Advanced job management (MID 0030-0039)
+- Full job management (MID 0030-0039, only MID 0128 batch increment is implemented)
 - Alarm subscriptions (MID 0070-0078)
 - Result uploads (MID 0064-0065)
 - Time setting (MID 0080-0081)
