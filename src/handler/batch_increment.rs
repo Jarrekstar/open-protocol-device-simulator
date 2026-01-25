@@ -28,7 +28,10 @@ impl MidHandler for BatchIncrementHandler {
             state.increment_batch()
         };
 
-        println!("MID 0128: Job batch increment - new counter: {}", new_counter);
+        println!(
+            "MID 0128: Job batch increment - new counter: {}",
+            new_counter
+        );
 
         let ack_data = CommandAccepted::with_mid(128);
 
