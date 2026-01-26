@@ -170,6 +170,34 @@ fn print_config(settings: &Settings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// Helper struct that cleans up a temporary file on drop
+    struct TempFile {
+        path: PathBuf,
+    }
+
+    impl TempFile {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(name);
+            Self { path }
+        }
+
+        fn write(&self, content: &str) {
+            fs::write(&self.path, content).expect("Failed to write temp file");
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
 
     #[test]
     fn test_default_config() {
@@ -204,5 +232,141 @@ mod tests {
         // Unchanged values should remain at defaults
         assert_eq!(settings.device.channel_id, 1);
         assert_eq!(settings.device.supplier_code, "SIM");
+    }
+
+    #[test]
+    fn test_load_valid_toml_file() {
+        let temp_file = TempFile::new("test_valid_config.toml");
+        temp_file.write(
+            r#"
+[server]
+tcp_port = 9000
+http_port = 9001
+bind_address = "192.168.1.1"
+event_channel_capacity = 200
+
+[device]
+cell_id = 42
+channel_id = 7
+controller_name = "TestSimulator"
+supplier_code = "TST"
+
+[database]
+path = "/tmp/test.db"
+
+[defaults]
+auto_tightening_interval_ms = 5000
+auto_tightening_duration_ms = 2000
+failure_rate = 0.25
+"#,
+        );
+
+        let settings = load_config_file(temp_file.path()).expect("Should load valid config");
+
+        assert_eq!(settings.server.tcp_port, 9000);
+        assert_eq!(settings.server.http_port, 9001);
+        assert_eq!(settings.server.bind_address, "192.168.1.1");
+        assert_eq!(settings.server.event_channel_capacity, 200);
+        assert_eq!(settings.device.cell_id, 42);
+        assert_eq!(settings.device.channel_id, 7);
+        assert_eq!(settings.device.controller_name, "TestSimulator");
+        assert_eq!(settings.device.supplier_code, "TST");
+        assert_eq!(settings.database.path, PathBuf::from("/tmp/test.db"));
+        assert_eq!(settings.defaults.auto_tightening_interval_ms, 5000);
+        assert_eq!(settings.defaults.auto_tightening_duration_ms, 2000);
+        assert!((settings.defaults.failure_rate - 0.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_load_nonexistent_file() {
+        let path = Path::new("/nonexistent/path/to/config.toml");
+        let result = load_config_file(path);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ConfigError::FileError(_)));
+    }
+
+    #[test]
+    fn test_load_invalid_toml_syntax() {
+        let temp_file = TempFile::new("test_invalid_syntax.toml");
+        temp_file.write(
+            r#"
+[server
+tcp_port = 9000
+this is not valid toml syntax!!!
+"#,
+        );
+
+        let result = load_config_file(temp_file.path());
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ConfigError::FileError(_)));
+    }
+
+    #[test]
+    fn test_load_toml_wrong_types() {
+        let temp_file = TempFile::new("test_wrong_types.toml");
+        // tcp_port should be u16, not a string
+        temp_file.write(
+            r#"
+[server]
+tcp_port = "not a number"
+"#,
+        );
+
+        let result = load_config_file(temp_file.path());
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ConfigError::ParseError(_)));
+    }
+
+    #[test]
+    fn test_config_error_display() {
+        let file_error = ConfigError::FileError("file not found".to_string());
+        let parse_error = ConfigError::ParseError("invalid type".to_string());
+
+        let file_msg = format!("{}", file_error);
+        let parse_msg = format!("{}", parse_error);
+
+        assert!(file_msg.contains("Configuration file error"));
+        assert!(file_msg.contains("file not found"));
+        assert!(parse_msg.contains("Configuration parse error"));
+        assert!(parse_msg.contains("invalid type"));
+    }
+
+    #[test]
+    fn test_partial_config_uses_defaults() {
+        let temp_file = TempFile::new("test_partial_config.toml");
+        // Only specify a few fields, rest should use defaults
+        temp_file.write(
+            r#"
+[server]
+tcp_port = 7777
+
+[device]
+controller_name = "PartialConfig"
+"#,
+        );
+
+        let settings = load_config_file(temp_file.path()).expect("Should load partial config");
+
+        // Specified values
+        assert_eq!(settings.server.tcp_port, 7777);
+        assert_eq!(settings.device.controller_name, "PartialConfig");
+
+        // Default values for unspecified fields
+        assert_eq!(settings.server.http_port, 8081);
+        assert_eq!(settings.server.bind_address, "0.0.0.0");
+        assert_eq!(settings.server.event_channel_capacity, 100);
+        assert_eq!(settings.device.cell_id, 1);
+        assert_eq!(settings.device.channel_id, 1);
+        assert_eq!(settings.device.supplier_code, "SIM");
+        assert_eq!(settings.database.path, PathBuf::from("simulator.db"));
+        assert_eq!(settings.defaults.auto_tightening_interval_ms, 3000);
+        assert_eq!(settings.defaults.auto_tightening_duration_ms, 1500);
+        assert!((settings.defaults.failure_rate - 0.1).abs() < f64::EPSILON);
     }
 }
