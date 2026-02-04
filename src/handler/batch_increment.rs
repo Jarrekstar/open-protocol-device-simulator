@@ -5,33 +5,38 @@
 
 use crate::handler::data::command_accepted::CommandAccepted;
 use crate::handler::{HandlerError, MidHandler};
+use crate::observable_state::ObservableState;
 use crate::protocol::{Message, Response};
-use crate::state::DeviceState;
-use std::sync::{Arc, RwLock};
 
 /// MID 0128 - Job batch increment
 /// Increments the batch counter to skip a bolt position
 pub struct BatchIncrementHandler {
-    state: Arc<RwLock<DeviceState>>,
+    state: ObservableState,
 }
 
 impl BatchIncrementHandler {
-    pub fn new(state: Arc<RwLock<DeviceState>>) -> Self {
+    pub fn new(state: ObservableState) -> Self {
         Self { state }
     }
 }
 
 impl MidHandler for BatchIncrementHandler {
     fn handle(&self, message: &Message) -> Result<Response, HandlerError> {
-        let new_counter = {
-            let mut state = self.state.write().unwrap();
-            state.increment_batch()
+        let (new_counter, target_size) = {
+            let mut state = self.state.write();
+            let new_counter = state.increment_batch();
+            let target_size = state.tightening_tracker.batch_size();
+            (new_counter, target_size)
         };
 
         println!(
             "MID 0128: Job batch increment - new counter: {}",
             new_counter
         );
+
+        // Broadcast progress update to frontend
+        self.state
+            .broadcast_auto_progress(new_counter, target_size, true);
 
         let ack_data = CommandAccepted::with_mid(128);
 
@@ -44,18 +49,26 @@ impl MidHandler for BatchIncrementHandler {
 mod tests {
     use super::*;
     use crate::protocol::Message;
+    use crate::state::DeviceState;
+    use tokio::sync::broadcast;
+
+    fn create_test_observable() -> ObservableState {
+        let state = DeviceState::new_shared();
+        let (tx, _) = broadcast::channel(16);
+        ObservableState::new(state, tx)
+    }
 
     #[test]
     fn test_batch_increment() {
-        let state = DeviceState::new_shared();
+        let observable = create_test_observable();
 
         // Enable batch mode first
         {
-            let mut s = state.write().unwrap();
+            let mut s = observable.write();
             s.set_batch_size(5);
         }
 
-        let handler = BatchIncrementHandler::new(Arc::clone(&state));
+        let handler = BatchIncrementHandler::new(observable.clone());
 
         // Create a MID 0128 message
         let message = Message {
@@ -69,7 +82,7 @@ mod tests {
         assert_eq!(response.mid, 5); // Command accepted
 
         // Verify counter was incremented
-        let s = state.read().unwrap();
+        let s = observable.read();
         assert_eq!(s.tightening_tracker.counter(), 1);
     }
 }

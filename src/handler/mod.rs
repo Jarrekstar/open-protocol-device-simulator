@@ -114,9 +114,9 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
     );
     registry.register(
         128,
-        Box::new(batch_increment::BatchIncrementHandler::new(Arc::clone(
-            state,
-        ))),
+        Box::new(batch_increment::BatchIncrementHandler::new(
+            observable_state.clone(),
+        )),
     );
     registry.register(
         42,
