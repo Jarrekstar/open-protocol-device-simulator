@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api } from '$lib/api/client';
+	import { deviceState } from '$lib/stores/device';
 	import { showToast } from '$lib/stores/ui';
 	import { Section, Button, FormField } from '$lib/components/ui';
 	import { getPsetTargets, formatErrorMessage, validateRange } from '$lib/utils';
@@ -26,6 +27,7 @@
 	const currentPsetTargets = $derived(
 		currentPset ? getPsetTargets(currentPset) : null
 	);
+	const isToolEnabled = $derived($deviceState?.tool_enabled ?? true);
 
 	const isFormValid = $derived(
 		usePsetValues || (!validationErrors.torque && !validationErrors.angle)
@@ -54,6 +56,14 @@
 	});
 
 	async function handleSubmit() {
+		if (!isToolEnabled) {
+			showToast({
+				type: 'warning',
+				message: 'Tool is disabled. Enable the tool before simulating tightening.'
+			});
+			return;
+		}
+
 		isSubmitting = true;
 		try {
 			let payload: TighteningRequest = {};
@@ -88,6 +98,15 @@
 		}}
 		class="space-y-6"
 	>
+		{#if !isToolEnabled}
+			<div
+				class="flex items-start gap-2 rounded-md bg-surface-100-800-token p-3 text-sm text-warning-600"
+			>
+				<span aria-hidden="true">⚠️</span>
+				<span>Tool is disabled. Single tightening simulation is unavailable.</span>
+			</div>
+		{/if}
+
 		<!-- Toggle between PSET and Manual -->
 		<div
 			class="inline-flex rounded-lg border border-surface-200-700-token bg-surface-100-800-token p-1"
@@ -179,7 +198,11 @@
 			/>
 		{/if}
 
-		<Button type="submit" disabled={isSubmitting || !isFormValid} class="w-full sm:w-auto">
+		<Button
+			type="submit"
+			disabled={isSubmitting || !isFormValid || !isToolEnabled}
+			class="w-full sm:w-auto"
+		>
 			{isSubmitting ? 'Simulating...' : 'Simulate Tightening'}
 		</Button>
 	</form>

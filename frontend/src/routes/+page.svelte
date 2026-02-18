@@ -20,8 +20,17 @@
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
 
 	let isSimulating = $state(false);
+	const isToolEnabled = $derived($deviceState?.tool_enabled ?? true);
 
 	async function handleSimulateTightening() {
+		if (!isToolEnabled) {
+			showToast({
+				type: 'warning',
+				message: 'Tool is disabled. Enable the tool before simulating tightening.'
+			});
+			return;
+		}
+
 		isSimulating = true;
 		try {
 			await api.simulateTightening();
@@ -52,7 +61,8 @@
 		<button
 			class="btn variant-filled-primary {isSimulating ? 'loading' : ''}"
 			onclick={handleSimulateTightening}
-			disabled={isSimulating}
+			disabled={isSimulating || !isToolEnabled}
+			title={isToolEnabled ? 'Simulate tightening' : 'Tool is disabled'}
 		>
 			{isSimulating ? 'Simulating...' : '⚡ Simulate Tightening'}
 		</button>

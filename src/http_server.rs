@@ -224,6 +224,23 @@ async fn simulate_tightening(
     AxumState(server_state): AxumState<ServerState>,
     Json(payload): Json<TighteningRequest>,
 ) -> impl IntoResponse {
+    let tool_enabled = {
+        let state = server_state.observable_state.read();
+        state.tool_enabled
+    };
+
+    if !tool_enabled {
+        return (
+            StatusCode::CONFLICT,
+            Json(TighteningResponse {
+                success: false,
+                message: "Cannot simulate tightening: tool is disabled".to_string(),
+                batch_counter: 0,
+                subscribers: 0,
+            }),
+        );
+    }
+
     // Determine tightening params: use overrides if provided, otherwise use PSET
     let params = match (payload.torque, payload.angle) {
         (Some(torque), Some(angle)) => {

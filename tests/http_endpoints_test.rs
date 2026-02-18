@@ -90,6 +90,63 @@ async fn test_simulate_tightening_endpoint() {
     assert_eq!(result["batch_counter"], 1);
 }
 
+/// Test POST /simulate/tightening endpoint when tool is disabled
+#[tokio::test]
+async fn test_simulate_tightening_endpoint_rejects_when_tool_disabled() {
+    use open_protocol_device_simulator::{
+        DeviceState, ObservableState, SimulatorEvent, config, http_server,
+    };
+
+    let state = Arc::new(RwLock::new(DeviceState::new()));
+    {
+        let mut s = state.write().unwrap();
+        s.set_batch_size(5);
+        s.disable_tool();
+    }
+
+    let (broadcaster, mut receiver) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let _keepalive_sender = broadcaster.clone();
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let app = http_server::create_router(observable_state, config::Settings::default());
+
+    let payload = json!({
+        "torque": 12.5,
+        "angle": 40.0,
+        "ok": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/simulate/tightening")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(result["success"], false);
+    assert!(result["message"]
+        .as_str()
+        .unwrap()
+        .contains("tool is disabled"));
+
+    let s = state.read().unwrap();
+    assert_eq!(s.tightening_tracker.counter(), 0);
+
+    assert!(matches!(
+        receiver.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+}
+
 /// Test POST /auto-tightening/start endpoint
 #[tokio::test]
 async fn test_start_auto_tightening_endpoint() {

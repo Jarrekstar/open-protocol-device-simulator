@@ -32,7 +32,28 @@ export class ApiClient {
 		});
 
 		if (!response.ok) {
-			throw new Error(`API error: ${response.status} ${response.statusText}`);
+			let errorMessage = '';
+			const contentType = response.headers.get('content-type') || '';
+
+			if (contentType.includes('application/json')) {
+				const body = (await response.json().catch(() => null)) as
+					| { message?: unknown }
+					| null;
+				if (body && typeof body.message === 'string') {
+					errorMessage = body.message;
+				}
+			} else {
+				const bodyText = await response.text().catch(() => '');
+				if (bodyText) {
+					errorMessage = bodyText;
+				}
+			}
+
+			if (!errorMessage) {
+				errorMessage = `API error: ${response.status} ${response.statusText}`;
+			}
+
+			throw new Error(errorMessage);
 		}
 
 		return response.json();
