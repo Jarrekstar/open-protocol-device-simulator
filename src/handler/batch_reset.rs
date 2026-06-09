@@ -23,6 +23,13 @@ impl BatchResetHandler {
 
 impl MidHandler for BatchResetHandler {
     fn handle(&self, message: &Message) -> Result<Response, HandlerError> {
+        if self.state.read().unwrap().is_job_mode() {
+            return Ok(Response::from_data(
+                4,
+                message.revision,
+                ErrorResponse::invalid_data(20),
+            ));
+        }
         // Extract pset ID from message data if present (bytes 0-2, 3 ASCII digits)
         let pset_id = if message.data.len() >= 3 {
             String::from_utf8_lossy(&message.data[0..3])

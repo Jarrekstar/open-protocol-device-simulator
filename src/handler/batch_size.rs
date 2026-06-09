@@ -23,6 +23,13 @@ impl BatchSizeHandler {
 
 impl MidHandler for BatchSizeHandler {
     fn handle(&self, message: &Message) -> Result<Response, HandlerError> {
+        if self.state.read().unwrap().is_job_mode() || message.data.len() != 7 {
+            return Ok(Response::from_data(
+                4,
+                message.revision,
+                crate::handler::data::ErrorResponse::invalid_data(19),
+            ));
+        }
         // Extract batch size from message data if present
         let batch_str = if !message.data.is_empty() {
             let pset_id = &message.data[0..=2];

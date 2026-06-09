@@ -407,8 +407,11 @@ fn test_unknown_mid() {
         data: vec![],
     };
 
-    let result = registry.handle_message(&message);
-    assert!(result.is_err(), "Unknown MID should return error");
+    let response = registry
+        .handle_message(&message)
+        .expect("Unknown MID should produce MID 0004");
+    assert_eq!(response.mid, 4);
+    assert_eq!(response.data, b"999899");
 }
 
 /// Test batch mode lifecycle

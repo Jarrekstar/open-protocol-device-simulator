@@ -4,6 +4,7 @@ export type { TighteningResult } from './TighteningResult';
 export type { SpindleResult, MultiSpindleResult, MultiSpindleStatus } from './MultiSpindle';
 export type { SimulatorEvent } from './SimulatorEvent';
 export type { Pset } from './Pset';
+export type { Job, JobStep, JobStatus, JobRuntimeState } from './Job';
 
 // API request/response types
 export interface AutoTighteningRequest {

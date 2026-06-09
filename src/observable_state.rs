@@ -5,6 +5,7 @@
 //! notifications to WebSocket clients.
 
 use crate::events::{EventBroadcaster, SimulatorEvent};
+use crate::job::Job;
 use crate::state::DeviceState;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -69,6 +70,50 @@ impl ObservableState {
             pset_id,
             pset_name: name_for_broadcast,
         });
+    }
+
+    pub fn select_job(&self, job: Job, pset_name: Option<String>) -> Result<(), String> {
+        let pset_id = job.steps[0].pset_id;
+        let pset_event_name = pset_name.clone().unwrap_or_else(|| "Unknown".to_string());
+        let runtime = {
+            let mut state = self.state.write().unwrap();
+            state.select_job(job, pset_name)?;
+            state
+                .job_runtime_state()
+                .expect("Job runtime exists after selection")
+        };
+        let _ = self.broadcaster.send(SimulatorEvent::PsetChanged {
+            pset_id,
+            pset_name: pset_event_name,
+        });
+        let _ = self
+            .broadcaster
+            .send(SimulatorEvent::JobSelected { state: runtime });
+        Ok(())
+    }
+
+    pub fn restart_job(&self, job_id: u32, pset_name: Option<String>) -> Result<(), String> {
+        let pset_event_name = pset_name.clone().unwrap_or_else(|| "Unknown".to_string());
+        let runtime = {
+            let mut state = self.state.write().unwrap();
+            state.restart_job(job_id, pset_name)?;
+            state
+                .job_runtime_state()
+                .expect("Job runtime exists after restart")
+        };
+        let _ = self.broadcaster.send(SimulatorEvent::PsetChanged {
+            pset_id: runtime.current_pset_id,
+            pset_name: pset_event_name,
+        });
+        let _ = self
+            .broadcaster
+            .send(SimulatorEvent::JobRestarted { state: runtime });
+        Ok(())
+    }
+
+    pub fn clear_job_mode(&self) -> Result<(), String> {
+        let mut state = self.state.write().unwrap();
+        state.clear_job_mode()
     }
 
     /// Set the vehicle ID and broadcast the event

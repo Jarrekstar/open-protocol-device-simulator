@@ -103,5 +103,28 @@
 				event.target_size
 			)}
 		</p>
+	{:else if event.type === 'JobSelected' ||
+		event.type === 'JobProgress' ||
+		event.type === 'JobRestarted' ||
+		event.type === 'JobCompleted' ||
+		event.type === 'JobStepChanged'}
+		<dl class="mt-3 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+			<div>
+				<dt class="text-xs uppercase opacity-60">Job</dt>
+				<dd class="font-semibold">{event.state.job_name}</dd>
+			</div>
+			<div>
+				<dt class="text-xs uppercase opacity-60">Status</dt>
+				<dd class="font-semibold">{event.state.status.toUpperCase()}</dd>
+			</div>
+			<div>
+				<dt class="text-xs uppercase opacity-60">Step</dt>
+				<dd class="font-semibold">{event.state.current_step} / {event.state.total_steps}</dd>
+			</div>
+			<div>
+				<dt class="text-xs uppercase opacity-60">Progress</dt>
+				<dd class="font-semibold">{event.state.total_progress} / {event.state.total_batch_size}</dd>
+			</div>
+		</dl>
 	{/if}
 </article>

@@ -114,15 +114,39 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
     // Create observable state wrapper that broadcasts events on state changes
     let observable_state = ObservableState::new(device_state, event_tx.clone());
 
+    let db_path = settings.database.path.to_str().unwrap_or("simulator.db");
+    let pset_repository = open_protocol_device_simulator::pset::create_sqlite_repository(db_path)
+        .unwrap_or_else(|error| {
+            eprintln!("Failed to initialize SQLite PSET repository: {error}");
+            open_protocol_device_simulator::pset::create_default_repository()
+        });
+    let job_repository = open_protocol_device_simulator::job::create_sqlite_repository(db_path)
+        .unwrap_or_else(|error| {
+            eprintln!("Failed to initialize SQLite Job repository: {error}");
+            open_protocol_device_simulator::job::create_default_repository()
+        });
+
     // Spawn HTTP server for state inspection and event generation
     let http_observable = observable_state.clone();
     let http_settings = settings.clone();
+    let http_psets = pset_repository.clone();
+    let http_jobs = job_repository.clone();
     tokio::spawn(async move {
-        http_server::start_http_server(http_observable, http_settings).await;
+        http_server::start_http_server_with_repositories(
+            http_observable,
+            http_settings,
+            http_psets,
+            http_jobs,
+        )
+        .await;
     });
 
     // Create handler registry (shared across all connections)
-    let registry = Arc::new(handler::create_default_registry(observable_state.clone()));
+    let registry = Arc::new(handler::create_registry_with_repositories(
+        observable_state.clone(),
+        pset_repository,
+        job_repository,
+    ));
 
     loop {
         let (stream, addr) = listener.accept().await?;
@@ -157,24 +181,12 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                     Ok(message) => {
                                         println!("Parsed MID {}, revision {}", message.mid, message.revision);
 
-                                        // Track subscription state based on MID using session
-                                        match message.mid {
-                                            60 => session.subscribe_tightening_result(),
-                                            63 => session.unsubscribe_tightening_result(),
-                                            14 => session.subscribe_pset_selection(),
-                                            17 => session.unsubscribe_pset_selection(),
-                                            51 => session.subscribe_vehicle_id(),
-                                            54 => session.unsubscribe_vehicle_id(),
-                                            90 => session.subscribe_multi_spindle_status(),
-                                            92 => session.unsubscribe_multi_spindle_status(),
-                                            100 => session.subscribe_multi_spindle_result(),
-                                            103 => session.unsubscribe_multi_spindle_result(),
-                                            _ => {}
-                                        }
-
                                         // Handle the message
-                                        match registry.handle_message(&message) {
-                                            Ok(response) => {
+                                        match registry.dispatch(&message, session.subscriptions_mut()) {
+                                            Ok(handler::HandlerResult::Response(response)) => {
+                                                if response.mid != 4 {
+                                                    session.apply_subscription_message(message.mid);
+                                                }
                                                 // Serialize and send response
                                                 let response_bytes = protocol::serializer::serialize_response(&response);
                                                 println!("Sending response: MID {}", response.mid);
@@ -202,7 +214,11 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                                 if message.mid == 51 {
                                                     // VIN is empty because handlers don't have direct state access
                                                     // VIN changes are broadcast via SimulatorEvent::VehicleIdChanged
-                                                    let current_vin = String::new();
+                                                    let current_vin = conn_observable_state
+                                                        .read()
+                                                        .vehicle_id
+                                                        .clone()
+                                                        .unwrap_or_default();
                                                     let vin_data = handler::data::VehicleIdBroadcast::new(current_vin.clone());
                                                     let vin_response = protocol::Response::from_data(52, 1, vin_data);
                                                     let vin_response_bytes = protocol::serializer::serialize_response(&vin_response);
@@ -222,6 +238,9 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                                         Ok(true) => {}
                                                     }
                                                 }
+                                            }
+                                            Ok(handler::HandlerResult::NoResponse) => {
+                                                println!("MID {} acknowledged without response", message.mid);
                                             }
                                             Err(e) => {
                                                 eprintln!("Handler error: {e}");
@@ -358,7 +377,14 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                     }
                                 }
                             }
-                            SimulatorEvent::MultiSpindleResultCompleted { result } => {
+                            SimulatorEvent::MultiSpindleResultCompleted {
+                                result,
+                                job_id,
+                                pset_id,
+                                batch_size,
+                                batch_counter,
+                                batch_status,
+                            } => {
                                 if session.subscriptions().is_subscribed_to_multi_spindle_result() {
                                     println!("Broadcasting MID 0101 to subscribed client ({}): result_id {}, sync_id {}, status {}",
                                         session.addr(), result.result_id, result.sync_id,
@@ -367,12 +393,16 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                     // Create MID 0101 broadcast with multi-spindle result data
                                     let result_data = handler::data::MultiSpindleResultBroadcast::new(
                                         result,
-                                        String::new(), // VIN (not available in session context)
-                                        1,             // job_id
-                                        1,             // pset_id
-                                        0,             // batch_size
-                                        0,             // batch_counter
-                                        2,             // batch_status
+                                        conn_observable_state
+                                            .read()
+                                            .vehicle_id
+                                            .clone()
+                                            .unwrap_or_default(),
+                                        job_id,
+                                        pset_id,
+                                        batch_size,
+                                        batch_counter,
+                                        batch_status,
                                     );
                                     let response = protocol::Response::from_data(101, 1, result_data);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
@@ -395,6 +425,40 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                             SimulatorEvent::AutoTighteningProgress { .. } => {
                                 // Auto-tightening progress is only sent to WebSocket clients, not TCP
                                 // No MID exists in Open Protocol for auto-tightening progress
+                            }
+                            SimulatorEvent::JobSelected { state }
+                            | SimulatorEvent::JobProgress { state }
+                            | SimulatorEvent::JobRestarted { state } => {
+                                if let Some(revision) = session.subscriptions().job_info_revision()
+                                    && let Some(codec) =
+                                        open_protocol_device_simulator::job_codec::codec_for_revision(revision)
+                                {
+                                    match codec.serialize_job_info(&state) {
+                                        Ok(data) => {
+                                            let response = protocol::Response::new(35, revision, data);
+                                            let response_bytes =
+                                                protocol::serializer::serialize_response(&response);
+                                            if let Err(error) = send_with_failure_injection(
+                                                &mut framed,
+                                                response_bytes,
+                                                &conn_observable_state,
+                                                "MID 0035 Job info broadcast",
+                                            )
+                                            .await
+                                            {
+                                                eprintln!("send error during Job broadcast: {error}");
+                                                break;
+                                            }
+                                        }
+                                        Err(error) => {
+                                            eprintln!("Failed to serialize MID 0035: {error}");
+                                        }
+                                    }
+                                }
+                            }
+                            SimulatorEvent::JobStepChanged { .. }
+                            | SimulatorEvent::JobCompleted { .. } => {
+                                // Frontend-specific typed events. MID 0035 is emitted by JobProgress.
                             }
                         }
                     }

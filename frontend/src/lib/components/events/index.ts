@@ -14,3 +14,4 @@ export { default as PsetChangedEvent } from './PsetChangedEvent.svelte';
 export { default as TighteningEvent } from './TighteningEvent.svelte';
 export { default as ToolStateEvent } from './ToolStateEvent.svelte';
 export { default as VehicleIdEvent } from './VehicleIdEvent.svelte';
+export { default as JobEvent } from './JobEvent.svelte';

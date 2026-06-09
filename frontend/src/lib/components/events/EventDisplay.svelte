@@ -8,6 +8,7 @@
 	import MultiSpindleResultEvent from './MultiSpindleResultEvent.svelte';
 	import MultiSpindleStatusEvent from './MultiSpindleStatusEvent.svelte';
 	import AutoTighteningProgressEvent from './AutoTighteningProgressEvent.svelte';
+	import JobEvent from './JobEvent.svelte';
 
 	interface Props {
 		event: SimulatorEvent;
@@ -36,4 +37,14 @@
 		targetSize={event.target_size}
 		running={event.running}
 	/>
+{:else if event.type === 'JobSelected'}
+	<JobEvent action="Job selected" state={event.state} />
+{:else if event.type === 'JobProgress'}
+	<JobEvent action="Job progress" state={event.state} />
+{:else if event.type === 'JobStepChanged'}
+	<JobEvent action="Step transition" state={event.state} previousStep={event.previous_step} />
+{:else if event.type === 'JobRestarted'}
+	<JobEvent action="Job restarted" state={event.state} />
+{:else if event.type === 'JobCompleted'}
+	<JobEvent action="Job completed" state={event.state} />
 {/if}

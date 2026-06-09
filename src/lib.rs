@@ -7,6 +7,8 @@ pub mod events;
 pub mod failure_simulator;
 pub mod handler;
 pub mod http_server;
+pub mod job;
+pub mod job_codec;
 pub mod multi_spindle;
 pub mod observable_state;
 pub mod protocol;

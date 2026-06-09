@@ -7,26 +7,36 @@ use crate::handler::data::command_accepted::CommandAccepted;
 use crate::handler::{HandlerError, MidHandler};
 use crate::observable_state::ObservableState;
 use crate::protocol::{Message, Response};
+use crate::pset::SharedPsetRepository;
 
 /// MID 0128 - Job batch increment
 /// Increments the batch counter to skip a bolt position
 pub struct BatchIncrementHandler {
     state: ObservableState,
+    psets: SharedPsetRepository,
 }
 
 impl BatchIncrementHandler {
-    pub fn new(state: ObservableState) -> Self {
-        Self { state }
+    pub fn new(state: ObservableState, psets: SharedPsetRepository) -> Self {
+        Self { state, psets }
     }
 }
 
 impl MidHandler for BatchIncrementHandler {
     fn handle(&self, message: &Message) -> Result<Response, HandlerError> {
-        let (new_counter, target_size) = {
+        let (new_counter, target_size, progress, runtime, tool_disabled) = {
             let mut state = self.state.write();
-            let new_counter = state.increment_batch();
+            let tool_was_enabled = state.tool_enabled;
+            let (new_counter, progress) = state.increment_batch_with_progress();
             let target_size = state.tightening_tracker.batch_size();
-            (new_counter, target_size)
+            let runtime = state.job_runtime_state();
+            (
+                new_counter,
+                target_size,
+                progress,
+                runtime,
+                tool_was_enabled && !state.tool_enabled,
+            )
         };
 
         println!(
@@ -37,6 +47,46 @@ impl MidHandler for BatchIncrementHandler {
         // Broadcast progress update to frontend
         self.state
             .broadcast_auto_progress(new_counter, target_size, true);
+        if let (Some(progress), Some(runtime)) = (progress, runtime) {
+            if progress.step_changed {
+                let pset_name = self
+                    .psets
+                    .read()
+                    .unwrap()
+                    .get_by_id(runtime.current_pset_id)
+                    .map(|pset| pset.name)
+                    .unwrap_or_else(|| "Unknown".to_string());
+                {
+                    let mut state = self.state.write();
+                    state.current_pset_name = Some(pset_name.clone());
+                }
+                self.state
+                    .broadcast(crate::events::SimulatorEvent::PsetChanged {
+                        pset_id: runtime.current_pset_id,
+                        pset_name,
+                    });
+                self.state
+                    .broadcast(crate::events::SimulatorEvent::JobStepChanged {
+                        state: runtime.clone(),
+                        previous_step: progress.previous_step_index as u32 + 1,
+                    });
+            }
+            self.state
+                .broadcast(crate::events::SimulatorEvent::JobProgress {
+                    state: runtime.clone(),
+                });
+            if let Some(status) = progress.completed_status {
+                let mut completed = runtime;
+                completed.status = status;
+                completed.total_progress = completed.total_batch_size;
+                self.state
+                    .broadcast(crate::events::SimulatorEvent::JobCompleted { state: completed });
+            }
+        }
+        if tool_disabled {
+            self.state
+                .broadcast(crate::events::SimulatorEvent::ToolStateChanged { enabled: false });
+        }
 
         let ack_data = CommandAccepted::with_mid(128);
 
@@ -68,7 +118,10 @@ mod tests {
             s.set_batch_size(5);
         }
 
-        let handler = BatchIncrementHandler::new(observable.clone());
+        let handler = BatchIncrementHandler::new(
+            observable.clone(),
+            crate::pset::create_default_repository(),
+        );
 
         // Create a MID 0128 message
         let message = Message {

@@ -5,6 +5,7 @@
 	import { Section, Button, FormField } from '$lib/components/ui';
 	import { getPsetTargets, formatErrorMessage, validateRange } from '$lib/utils';
 	import type { Pset, TighteningRequest } from '$lib/types';
+	import { refreshDeviceState } from '$lib/stores/websocket';
 
 	interface Props {
 		currentPset: Pset | undefined;
@@ -28,6 +29,10 @@
 		currentPset ? getPsetTargets(currentPset) : null
 	);
 	const isToolEnabled = $derived($deviceState?.tool_enabled ?? true);
+	const isJobRunning = $derived($deviceState?.current_job_status === 'running');
+	const isCompletedJob = $derived(
+		$deviceState?.current_job_status === 'ok' || $deviceState?.current_job_status === 'nok'
+	);
 
 	const isFormValid = $derived(
 		usePsetValues || (!validationErrors.torque && !validationErrors.angle)
@@ -35,6 +40,7 @@
 
 	// Real-time validation using $effect
 	$effect(() => {
+		if (isJobRunning) usePsetValues = true;
 		if (!usePsetValues) {
 			validationErrors.torque = validateRange(
 				tighteningPayload.torque,
@@ -71,13 +77,11 @@
 			if (!usePsetValues) {
 				payload.torque = tighteningPayload.torque;
 				payload.angle = tighteningPayload.angle;
-
-				if (resultMode !== 'auto') {
-					payload.ok = resultMode === 'ok';
-				}
 			}
+			if (resultMode !== 'auto') payload.ok = resultMode === 'ok';
 
 			await api.simulateTightening(payload);
+			await refreshDeviceState();
 			showToast({ type: 'success', message: 'Tightening simulated!' });
 		} catch (error) {
 			showToast({ type: 'error', message: formatErrorMessage('simulate tightening', error) });
@@ -106,6 +110,16 @@
 				<span>Tool is disabled. Single tightening simulation is unavailable.</span>
 			</div>
 		{/if}
+		{#if isJobRunning}
+			<div class="rounded-md bg-warning-50 p-3 text-sm text-warning-700 dark:bg-warning-900/20">
+				JobMode controls PSET, torque, angle, and batch progression. Forced OK/NOK remains
+				available for testing.
+			</div>
+		{:else if isCompletedJob}
+			<div class="rounded-md bg-surface-100-800-token p-3 text-sm">
+				The active Job is complete. Restart it or exit JobMode before another tightening.
+			</div>
+		{/if}
 
 		<!-- Toggle between PSET and Manual -->
 		<div
@@ -128,6 +142,7 @@
 				class:text-white={!usePsetValues}
 				class:opacity-60={usePsetValues}
 				onclick={() => (usePsetValues = false)}
+				disabled={isJobRunning}
 			>
 				Manual Override
 			</button>
@@ -186,21 +201,23 @@
 				/>
 			</div>
 
-			<FormField
-				label="Result Mode"
-				type="select"
-				bind:value={resultMode}
-				options={[
-					{ value: 'auto', label: 'Auto (FSM determines)' },
-					{ value: 'ok', label: 'Force OK' },
-					{ value: 'nok', label: 'Force NOK' }
-				]}
-			/>
 		{/if}
+
+		<FormField
+			label="Result Mode"
+			type="select"
+			bind:value={resultMode}
+			options={[
+				{ value: 'auto', label: 'Auto (FSM determines)' },
+				{ value: 'ok', label: 'Force OK' },
+				{ value: 'nok', label: 'Force NOK' }
+			]}
+			help={isJobRunning ? 'Forced outcomes remain available while JobMode is running.' : undefined}
+		/>
 
 		<Button
 			type="submit"
-			disabled={isSubmitting || !isFormValid || !isToolEnabled}
+			disabled={isSubmitting || !isFormValid || !isToolEnabled || isCompletedJob}
 			class="w-full sm:w-auto"
 		>
 			{isSubmitting ? 'Simulating...' : 'Simulate Tightening'}

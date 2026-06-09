@@ -18,9 +18,13 @@
 	import MetricSparkline from '$lib/components/ui/MetricSparkline.svelte';
 	import HealthMonitor from '$lib/components/ui/HealthMonitor.svelte';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
+	import { refreshDeviceState } from '$lib/stores/websocket';
 
 	let isSimulating = $state(false);
 	const isToolEnabled = $derived($deviceState?.tool_enabled ?? true);
+	const isCompletedJob = $derived(
+		$deviceState?.current_job_status === 'ok' || $deviceState?.current_job_status === 'nok'
+	);
 
 	async function handleSimulateTightening() {
 		if (!isToolEnabled) {
@@ -34,6 +38,7 @@
 		isSimulating = true;
 		try {
 			await api.simulateTightening();
+			await refreshDeviceState();
 			showToast({ type: 'success', message: 'Tightening simulated!' });
 		} catch (error) {
 			showToast({ type: 'error', message: formatErrorMessage('simulate tightening', error) });
@@ -61,8 +66,12 @@
 		<button
 			class="btn variant-filled-primary {isSimulating ? 'loading' : ''}"
 			onclick={handleSimulateTightening}
-			disabled={isSimulating || !isToolEnabled}
-			title={isToolEnabled ? 'Simulate tightening' : 'Tool is disabled'}
+			disabled={isSimulating || !isToolEnabled || isCompletedJob}
+			title={isCompletedJob
+				? 'Restart or exit the completed Job'
+				: isToolEnabled
+					? 'Simulate tightening'
+					: 'Tool is disabled'}
 		>
 			{isSimulating ? 'Simulating...' : '⚡ Simulate Tightening'}
 		</button>
@@ -81,6 +90,37 @@
 							</dt>
 							<dd class="font-semibold text-surface-900 dark:text-surface-100">
 								{$deviceState.cell_id}
+							</dd>
+						</div>
+						<div class="divider-fade"></div>
+						<div class="flex items-center justify-between">
+							<dt class="text-xs uppercase tracking-wide text-surface-600 dark:text-surface-400">
+								Active Job
+							</dt>
+							<dd class="text-right">
+								{#if $deviceState.current_job_status}
+									<div class="flex items-center justify-end gap-2">
+										<Badge
+											variant={$deviceState.current_job_status === 'running'
+												? 'filled-primary'
+												: $deviceState.current_job_status === 'ok'
+													? 'filled-success'
+													: 'filled-error'}
+										>
+											{$deviceState.current_job_name}
+										</Badge>
+										<span class="text-xs text-surface-500">
+											{$deviceState.current_job_status.toUpperCase()}
+										</span>
+									</div>
+									<p class="mt-1 text-xs opacity-60">
+										Step {$deviceState.current_job_step} / {$deviceState.current_job_total_steps}
+										· {$deviceState.current_job_total_progress} /
+										{$deviceState.current_job_total_batch_size}
+									</p>
+								{:else}
+									<Badge variant="soft">None</Badge>
+								{/if}
 							</dd>
 						</div>
 						<div class="divider-fade"></div>
@@ -315,6 +355,9 @@
 				</a>
 				<a href="/psets" class="btn variant-ghost-surface">
 					PSETs
+				</a>
+				<a href="/jobs" class="btn variant-ghost-surface">
+					Jobs
 				</a>
 				<a href="/events" class="btn variant-ghost-surface">
 					Event Log

@@ -4,6 +4,7 @@ pub mod batch_size;
 pub mod communication_start;
 pub mod communication_stop;
 pub mod data;
+pub mod job;
 pub mod keep_alive;
 pub mod multi_spindle_result_ack;
 pub mod multi_spindle_result_subscribe;
@@ -26,7 +27,8 @@ pub mod vehicle_id_unsubscribe;
 
 use crate::observable_state::ObservableState;
 use crate::protocol::{Message, Response};
-use std::collections::HashMap;
+use crate::subscriptions::Subscriptions;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -40,37 +42,95 @@ pub enum HandlerError {
     Processing(String),
 }
 
+#[derive(Debug)]
+pub enum HandlerResult {
+    Response(Response),
+    NoResponse,
+}
+
+pub struct HandlerContext<'a> {
+    pub subscriptions: &'a mut Subscriptions,
+}
+
+impl<'a> HandlerContext<'a> {
+    pub fn new(subscriptions: &'a mut Subscriptions) -> Self {
+        Self { subscriptions }
+    }
+}
+
 /// Trait for handling specific MID messages
 pub trait MidHandler: Send + Sync {
     /// Process a message and generate a response
     fn handle(&self, message: &Message) -> Result<Response, HandlerError>;
+
+    fn handle_with_context(
+        &self,
+        message: &Message,
+        _context: &mut HandlerContext<'_>,
+    ) -> Result<HandlerResult, HandlerError> {
+        self.handle(message).map(HandlerResult::Response)
+    }
 }
 
 /// Registry that routes MIDs to their handlers
 pub struct HandlerRegistry {
-    handlers: HashMap<u16, Box<dyn MidHandler>>,
+    handlers: HashMap<(u16, u8), Box<dyn MidHandler>>,
+    known_mids: HashSet<u16>,
 }
 
 impl HandlerRegistry {
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
+            known_mids: HashSet::new(),
         }
     }
 
     /// Register a handler for a specific MID
     pub fn register(&mut self, mid: u16, handler: Box<dyn MidHandler>) {
-        self.handlers.insert(mid, handler);
+        self.register_revision(mid, 1, handler);
+    }
+
+    pub fn register_revision(&mut self, mid: u16, revision: u8, handler: Box<dyn MidHandler>) {
+        self.known_mids.insert(mid);
+        self.handlers.insert((mid, revision), handler);
+    }
+
+    pub fn mark_known(&mut self, mid: u16) {
+        self.known_mids.insert(mid);
     }
 
     /// Process a message using the appropriate handler
     pub fn handle_message(&self, message: &Message) -> Result<Response, HandlerError> {
-        let handler = self
-            .handlers
-            .get(&message.mid)
-            .ok_or(HandlerError::UnknownMid(message.mid))?;
+        let mut subscriptions = Subscriptions::new();
+        match self.dispatch(message, &mut subscriptions)? {
+            HandlerResult::Response(response) => Ok(response),
+            HandlerResult::NoResponse => Err(HandlerError::Processing(format!(
+                "MID {:04} does not produce a response",
+                message.mid
+            ))),
+        }
+    }
 
-        handler.handle(message)
+    pub fn dispatch(
+        &self,
+        message: &Message,
+        subscriptions: &mut Subscriptions,
+    ) -> Result<HandlerResult, HandlerError> {
+        if let Some(handler) = self.handlers.get(&(message.mid, message.revision)) {
+            return handler.handle_with_context(message, &mut HandlerContext::new(subscriptions));
+        }
+
+        let code = if self.known_mids.contains(&message.mid) {
+            data::error_response::ErrorCode::MidRevisionUnsupported
+        } else {
+            data::error_response::ErrorCode::GenericError
+        };
+        Ok(HandlerResult::Response(Response::from_data(
+            4,
+            message.revision,
+            data::ErrorResponse::new(message.mid, code),
+        )))
     }
 }
 
@@ -82,6 +142,18 @@ impl Default for HandlerRegistry {
 
 /// Create a registry with all standard handlers registered
 pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegistry {
+    create_registry_with_repositories(
+        observable_state,
+        crate::pset::create_default_repository(),
+        crate::job::create_default_repository(),
+    )
+}
+
+pub fn create_registry_with_repositories(
+    observable_state: ObservableState,
+    pset_repository: crate::pset::SharedPsetRepository,
+    job_repository: crate::job::SharedJobRepository,
+) -> HandlerRegistry {
     let mut registry = HandlerRegistry::new();
     let state = observable_state.state();
 
@@ -102,6 +174,7 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
         18,
         Box::new(pset_select::PsetSelectHandler::new(
             observable_state.clone(),
+            pset_repository.clone(),
         )),
     );
     registry.register(
@@ -116,6 +189,7 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
         128,
         Box::new(batch_increment::BatchIncrementHandler::new(
             observable_state.clone(),
+            pset_repository.clone(),
         )),
     );
     registry.register(
@@ -182,6 +256,49 @@ pub fn create_default_registry(observable_state: ObservableState) -> HandlerRegi
         Box::new(tightening_result_unsubscribe::TighteningResultUnsubscribeHandler),
     );
     registry.register(9999, Box::new(keep_alive::KeepAliveHandler));
+
+    let revision_1 = crate::job_codec::codec_for_revision(1).expect("Revision 1 Job codec");
+    registry.register_revision(
+        30,
+        1,
+        Box::new(job::JobIdUploadHandler::new(
+            job_repository.clone(),
+            revision_1.clone(),
+        )),
+    );
+    registry.mark_known(31);
+    registry.register_revision(
+        32,
+        1,
+        Box::new(job::JobDataUploadHandler::new(
+            job_repository.clone(),
+            revision_1.clone(),
+        )),
+    );
+    registry.mark_known(33);
+    registry.register_revision(34, 1, Box::new(job::JobInfoSubscribeHandler));
+    registry.mark_known(35);
+    registry.register_revision(36, 1, Box::new(job::JobInfoAcknowledgeHandler));
+    registry.register_revision(37, 1, Box::new(job::JobInfoUnsubscribeHandler));
+    registry.register_revision(
+        38,
+        1,
+        Box::new(job::JobSelectHandler::new(
+            observable_state.clone(),
+            job_repository,
+            pset_repository.clone(),
+            revision_1.clone(),
+        )),
+    );
+    registry.register_revision(
+        39,
+        1,
+        Box::new(job::JobRestartHandler::new(
+            observable_state,
+            pset_repository,
+            revision_1,
+        )),
+    );
 
     registry
 }

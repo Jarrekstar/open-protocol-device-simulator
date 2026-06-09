@@ -175,7 +175,8 @@ pub struct SqlitePsetRepository {
 impl SqlitePsetRepository {
     /// Create a new SQLite repository with the given database file path
     pub fn new(db_path: &str) -> Result<Self, String> {
-        let manager = SqliteConnectionManager::file(db_path);
+        let manager = SqliteConnectionManager::file(db_path)
+            .with_init(|connection| connection.execute_batch("PRAGMA foreign_keys = ON;"));
         let pool = Pool::new(manager).map_err(|e| format!("Failed to create pool: {}", e))?;
 
         let repo = Self { pool };

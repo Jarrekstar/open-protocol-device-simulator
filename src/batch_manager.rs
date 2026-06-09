@@ -1,3 +1,4 @@
+use crate::job::JobProgress;
 use serde::Serialize;
 
 /// Represents the status of a batch
@@ -22,6 +23,8 @@ pub struct TighteningInfo {
     pub tightening_id: u32,
     /// Batch status
     pub batch_status: BatchStatus,
+    /// JobMode progress for this tightening, when JobMode is active.
+    pub job_progress: Option<JobProgress>,
 }
 
 /// Manages batch state and lifecycle
@@ -78,6 +81,7 @@ impl BatchManager {
             counter: self.counter,
             tightening_id: 0, // Placeholder - caller must set this
             batch_status,
+            job_progress: None,
         }
     }
 

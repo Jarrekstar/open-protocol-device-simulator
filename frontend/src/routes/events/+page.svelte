@@ -24,7 +24,12 @@
 		{ id: 'ToolStateChanged', label: 'Tool State', icon: '🔄' },
 		{ id: 'PsetChanged', label: 'PSET', icon: '⚡' },
 		{ id: 'VehicleIdChanged', label: 'Vehicle ID', icon: '🚗' },
-		{ id: 'AutoTighteningProgress', label: 'Auto Progress', icon: '⏱️' }
+		{ id: 'AutoTighteningProgress', label: 'Auto Progress', icon: '⏱️' },
+		{ id: 'JobSelected', label: 'Job Selected', icon: 'J' },
+		{ id: 'JobProgress', label: 'Job Progress', icon: 'J' },
+		{ id: 'JobStepChanged', label: 'Job Step', icon: 'J' },
+		{ id: 'JobRestarted', label: 'Job Restart', icon: 'J' },
+		{ id: 'JobCompleted', label: 'Job Complete', icon: 'J' }
 	];
 
 	const viewModes = [
@@ -172,11 +177,25 @@
 												<Badge variant={event.enabled ? 'filled-success' : 'filled-error'}>
 													{event.enabled ? 'Enabled' : 'Disabled'}
 												</Badge>
-											{:else if event.type === 'AutoTighteningProgress'}
-												<Badge variant={event.running ? 'filled-primary' : 'soft'}>
-													{event.running ? 'Running' : 'Stopped'}
-												</Badge>
-											{:else}
+												{:else if event.type === 'AutoTighteningProgress'}
+													<Badge variant={event.running ? 'filled-primary' : 'soft'}>
+														{event.running ? 'Running' : 'Stopped'}
+													</Badge>
+												{:else if event.type === 'JobSelected' ||
+													event.type === 'JobProgress' ||
+													event.type === 'JobStepChanged' ||
+													event.type === 'JobRestarted' ||
+													event.type === 'JobCompleted'}
+													<Badge
+														variant={event.state.status === 'running'
+															? 'filled-primary'
+															: event.state.status === 'ok'
+																? 'filled-success'
+																: 'filled-error'}
+													>
+														{event.state.status.toUpperCase()}
+													</Badge>
+												{:else}
 												<span class="text-sm text-surface-500 dark:text-surface-400">—</span>
 											{/if}
 										</td>
@@ -200,12 +219,22 @@
 												<span class="text-sm"><span class="text-surface-600 dark:text-surface-400">VIN:</span> <span class="font-semibold">{event.vin}</span></span>
 											{:else if event.type === 'AutoTighteningProgress'}
 												<span class="text-sm"><span class="text-surface-600 dark:text-surface-400">Progress:</span> <span class="font-semibold">{formatBatchCounter(event.counter, event.target_size)}</span></span>
-											{:else if event.type === 'MultiSpindleStatusCompleted'}
-												<div class="flex gap-4 text-sm">
-													<span><span class="text-surface-600 dark:text-surface-400">Status:</span> <span class="font-semibold">{event.status.status === 0 ? 'Waiting' : event.status.status === 1 ? 'Running' : 'Completed'}</span></span>
-													<span><span class="text-surface-600 dark:text-surface-400">Sync ID:</span> <span class="font-semibold">{event.status.sync_id}</span></span>
-												</div>
-											{/if}
+												{:else if event.type === 'MultiSpindleStatusCompleted'}
+													<div class="flex gap-4 text-sm">
+														<span><span class="text-surface-600 dark:text-surface-400">Status:</span> <span class="font-semibold">{event.status.status === 0 ? 'Waiting' : event.status.status === 1 ? 'Running' : 'Completed'}</span></span>
+														<span><span class="text-surface-600 dark:text-surface-400">Sync ID:</span> <span class="font-semibold">{event.status.sync_id}</span></span>
+													</div>
+												{:else if event.type === 'JobSelected' ||
+													event.type === 'JobProgress' ||
+													event.type === 'JobStepChanged' ||
+													event.type === 'JobRestarted' ||
+													event.type === 'JobCompleted'}
+													<span class="text-sm">
+														<span class="font-semibold">{event.state.job_name}</span>
+														· Step {event.state.current_step}/{event.state.total_steps}
+														· {event.state.total_progress}/{event.state.total_batch_size}
+													</span>
+												{/if}
 										</td>
 									</tr>
 								{/each}

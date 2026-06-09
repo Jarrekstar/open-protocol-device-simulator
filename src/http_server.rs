@@ -3,6 +3,7 @@ use crate::device_fsm::{DeviceFSM, DeviceFSMState, TighteningParams};
 use crate::events::SimulatorEvent;
 use crate::failure_simulator::FailureConfig;
 use crate::handler::data::TighteningResult;
+use crate::job::{Job, SharedJobRepository};
 use crate::multi_spindle::{MultiSpindleStatus, generate_multi_spindle_results};
 use crate::observable_state::ObservableState;
 use crate::pset::{self, SharedPsetRepository};
@@ -30,6 +31,7 @@ pub struct ServerState {
     pub observable_state: ObservableState,
     pub auto_tightening_active: Arc<AtomicBool>,
     pub pset_repository: SharedPsetRepository,
+    pub job_repository: SharedJobRepository,
     pub settings: Settings,
 }
 
@@ -64,6 +66,9 @@ fn get_tightening_params(
 #[allow(clippy::too_many_arguments)]
 fn build_tightening_result(
     state: &DeviceState,
+    job_id: u32,
+    pset_id: u32,
+    batch_size: u32,
     info: &crate::batch_manager::TighteningInfo,
     torque: f64,
     angle: f64,
@@ -84,9 +89,9 @@ fn build_tightening_result(
         channel_id: state.channel_id,
         controller_name: state.controller_name.clone(),
         vin_number: state.vehicle_id.clone(),
-        job_id: state.current_job_id.unwrap_or(1),
-        pset_id: state.current_pset_id.unwrap_or(1),
-        batch_size: state.tightening_tracker.batch_size(),
+        job_id,
+        pset_id,
+        batch_size,
         batch_counter: info.counter,
         tightening_status: tightening_ok,
         torque_status: torque_ok,
@@ -106,6 +111,123 @@ fn build_tightening_result(
     }
 }
 
+struct OperationContext {
+    job_id: u32,
+    pset_id: u32,
+    batch_size: u32,
+}
+
+fn operation_context(state: &DeviceState) -> OperationContext {
+    OperationContext {
+        job_id: state.current_job_id.unwrap_or(1),
+        pset_id: state.current_pset_id.unwrap_or(1),
+        batch_size: state.tightening_tracker.batch_size(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_tightening_completion(
+    observable_state: &ObservableState,
+    pset_repository: &SharedPsetRepository,
+    params: &TighteningParams,
+    torque: f64,
+    angle: f64,
+    tightening_ok: bool,
+    torque_ok: bool,
+    angle_ok: bool,
+    broadcast_tightening_result: bool,
+) -> (u32, bool, u32) {
+    let (
+        result,
+        batch_counter,
+        batch_completed,
+        target_size,
+        job_progress,
+        runtime,
+        next_pset_id,
+        tool_was_disabled,
+    ) = {
+        let mut state = observable_state.write();
+        let context = operation_context(&state);
+        let tool_was_enabled = state.tool_enabled;
+        let info = state.add_tightening(tightening_ok);
+        let result = build_tightening_result(
+            &state,
+            context.job_id,
+            context.pset_id,
+            context.batch_size,
+            &info,
+            torque,
+            angle,
+            tightening_ok,
+            torque_ok,
+            angle_ok,
+            params,
+        );
+        let job_progress = info.job_progress.clone();
+        let runtime = state.job_runtime_state();
+        let next_pset_id = job_progress
+            .as_ref()
+            .filter(|progress| progress.step_changed)
+            .and_then(|_| state.current_pset_id);
+        (
+            result,
+            info.counter,
+            state.tightening_tracker.is_complete(),
+            state.tightening_tracker.batch_size(),
+            job_progress,
+            runtime,
+            next_pset_id,
+            tool_was_enabled && !state.tool_enabled,
+        )
+    };
+
+    if broadcast_tightening_result {
+        observable_state.broadcast(SimulatorEvent::TighteningCompleted { result });
+    }
+
+    if let (Some(progress), Some(runtime)) = (job_progress, runtime) {
+        if let Some(pset_id) = next_pset_id {
+            let pset_name = pset_repository
+                .read()
+                .unwrap()
+                .get_by_id(pset_id)
+                .map(|pset| pset.name)
+                .unwrap_or_else(|| "Unknown".to_string());
+            {
+                let mut state = observable_state.write();
+                state.current_pset_name = Some(pset_name.clone());
+            }
+            observable_state.broadcast(SimulatorEvent::PsetChanged { pset_id, pset_name });
+            observable_state.broadcast(SimulatorEvent::JobStepChanged {
+                state: runtime.clone(),
+                previous_step: progress.previous_step_index as u32 + 1,
+            });
+        }
+        observable_state.broadcast(SimulatorEvent::JobProgress {
+            state: runtime.clone(),
+        });
+        if let Some(status) = progress.completed_status {
+            let mut completed_state = runtime;
+            completed_state.status = status;
+            completed_state.total_progress = completed_state.total_batch_size;
+            observable_state.broadcast(SimulatorEvent::JobCompleted {
+                state: completed_state,
+            });
+        }
+    } else if batch_completed {
+        observable_state.broadcast(SimulatorEvent::BatchCompleted {
+            total: batch_counter,
+        });
+    }
+
+    if tool_was_disabled {
+        observable_state.broadcast(SimulatorEvent::ToolStateChanged { enabled: false });
+    }
+
+    (batch_counter, batch_completed, target_size)
+}
+
 /// Create the HTTP router with all endpoints configured
 pub fn create_router(observable_state: ObservableState, settings: Settings) -> Router {
     let db_path = settings.database.path.to_str().unwrap_or_else(|| {
@@ -122,11 +244,28 @@ pub fn create_router(observable_state: ObservableState, settings: Settings) -> R
         );
         crate::pset::create_default_repository()
     });
+    let job_repository = crate::job::create_sqlite_repository(db_path).unwrap_or_else(|e| {
+        eprintln!(
+            "Failed to create SQLite Job repository: {}. Falling back to in-memory.",
+            e
+        );
+        crate::job::create_default_repository()
+    });
 
+    create_router_with_repositories(observable_state, settings, pset_repository, job_repository)
+}
+
+pub fn create_router_with_repositories(
+    observable_state: ObservableState,
+    settings: Settings,
+    pset_repository: SharedPsetRepository,
+    job_repository: SharedJobRepository,
+) -> Router {
     let server_state = ServerState {
         observable_state,
         auto_tightening_active: Arc::new(AtomicBool::new(false)),
         pset_repository,
+        job_repository,
         settings,
     };
 
@@ -152,6 +291,14 @@ pub fn create_router(observable_state: ObservableState, settings: Settings) -> R
             get(get_pset_by_id).put(update_pset).delete(delete_pset),
         )
         .route("/psets/{id}/select", post(select_pset))
+        .route("/jobs", get(get_jobs).post(create_job))
+        .route("/jobs/active/clear", post(clear_active_job))
+        .route(
+            "/jobs/{id}",
+            get(get_job_by_id).put(update_job).delete(delete_job),
+        )
+        .route("/jobs/{id}/select", post(select_job))
+        .route("/jobs/{id}/restart", post(restart_job))
         .route("/ws/events", get(websocket_handler))
         .layer(cors)
         .with_state(server_state)
@@ -159,11 +306,30 @@ pub fn create_router(observable_state: ObservableState, settings: Settings) -> R
 
 /// Start the HTTP server for state inspection and simulation control
 pub async fn start_http_server(observable_state: ObservableState, settings: Settings) {
+    let db_path = settings.database.path.to_str().unwrap_or("simulator.db");
+    let psets = crate::pset::create_sqlite_repository(db_path)
+        .unwrap_or_else(|_| crate::pset::create_default_repository());
+    let jobs = crate::job::create_sqlite_repository(db_path)
+        .unwrap_or_else(|_| crate::job::create_default_repository());
+    start_http_server_with_repositories(observable_state, settings, psets, jobs).await;
+}
+
+pub async fn start_http_server_with_repositories(
+    observable_state: ObservableState,
+    settings: Settings,
+    pset_repository: SharedPsetRepository,
+    job_repository: SharedJobRepository,
+) {
     let bind_addr = format!(
         "{}:{}",
         settings.server.bind_address, settings.server.http_port
     );
-    let app = create_router(observable_state, settings);
+    let app = create_router_with_repositories(
+        observable_state,
+        settings,
+        pset_repository,
+        job_repository,
+    );
 
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
@@ -187,6 +353,14 @@ pub async fn start_http_server(observable_state: ObservableState, settings: Sett
     println!("  PUT    /psets/{{id}}                - Update a PSET");
     println!("  DELETE /psets/{{id}}                - Delete a PSET");
     println!("  POST   /psets/{{id}}/select         - Select a PSET as active");
+    println!("  GET    /jobs                     - Get all Jobs");
+    println!("  POST   /jobs                     - Create a Job");
+    println!("  GET    /jobs/{{id}}                - Get a Job");
+    println!("  PUT    /jobs/{{id}}                - Update a Job");
+    println!("  DELETE /jobs/{{id}}                - Delete a Job");
+    println!("  POST   /jobs/{{id}}/select         - Select a Job");
+    println!("  POST   /jobs/{{id}}/restart        - Restart the active Job");
+    println!("  POST   /jobs/active/clear        - Exit completed JobMode");
     println!("  GET    /ws/events                 - WebSocket event stream");
 
     axum::serve(listener, app)
@@ -224,9 +398,13 @@ async fn simulate_tightening(
     AxumState(server_state): AxumState<ServerState>,
     Json(payload): Json<TighteningRequest>,
 ) -> impl IntoResponse {
-    let tool_enabled = {
+    let (tool_enabled, job_mode, job_running) = {
         let state = server_state.observable_state.read();
-        state.tool_enabled
+        (
+            state.tool_enabled,
+            state.is_job_mode(),
+            state.is_job_running(),
+        )
     };
 
     if !tool_enabled {
@@ -235,6 +413,29 @@ async fn simulate_tightening(
             Json(TighteningResponse {
                 success: false,
                 message: "Cannot simulate tightening: tool is disabled".to_string(),
+                batch_counter: 0,
+                subscribers: 0,
+            }),
+        );
+    }
+    if job_mode && !job_running {
+        return (
+            StatusCode::CONFLICT,
+            Json(TighteningResponse {
+                success: false,
+                message: "The active Job is complete. Restart it or exit JobMode.".to_string(),
+                batch_counter: 0,
+                subscribers: 0,
+            }),
+        );
+    }
+    if job_running && (payload.torque.is_some() || payload.angle.is_some()) {
+        return (
+            StatusCode::CONFLICT,
+            Json(TighteningResponse {
+                success: false,
+                message: "Manual torque and angle overrides are disabled while a Job is running"
+                    .to_string(),
                 batch_counter: 0,
                 subscribers: 0,
             }),
@@ -308,41 +509,18 @@ async fn simulate_tightening(
         if final_ok { "OK" } else { "NOK" }
     );
 
-    let (result, batch_counter, batch_completed) = {
-        let mut state = server_state.observable_state.write();
-
-        // Add tightening to tracker
-        let info = state.tightening_tracker.add_tightening(final_ok);
-
-        // Build tightening result from device state
-        let result = build_tightening_result(
-            &state,
-            &info,
-            fsm_outcome.actual_torque,
-            fsm_outcome.actual_angle,
-            final_ok,
-            fsm_outcome.torque_ok,
-            fsm_outcome.angle_ok,
-            &params,
-        );
-
-        let batch_completed = state.tightening_tracker.is_complete();
-
-        // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
-
-        (result, info.counter, batch_completed)
-    };
-
-    // Broadcast the tightening event to all TCP clients
-    let event = SimulatorEvent::TighteningCompleted { result };
-    server_state.observable_state.broadcast(event);
-
-    // If batch completed, emit batch completion event
-    if batch_completed {
-        let batch_event = SimulatorEvent::BatchCompleted {
-            total: batch_counter,
-        };
-        server_state.observable_state.broadcast(batch_event);
+    let (batch_counter, batch_completed, _) = record_tightening_completion(
+        &server_state.observable_state,
+        &server_state.pset_repository,
+        &params,
+        fsm_outcome.actual_torque,
+        fsm_outcome.actual_angle,
+        final_ok,
+        fsm_outcome.torque_ok,
+        fsm_outcome.angle_ok,
+        true,
+    );
+    if batch_completed && !job_mode {
         println!("Batch completed with {} tightenings", batch_counter);
     }
 
@@ -566,11 +744,13 @@ async fn start_auto_tightening(
                 // ============================================================
 
                 // Get result_id and pset_id before generating results
-                let (result_id, pset_id) = {
+                let (result_id, job_id, pset_id, operation_batch_size) = {
                     let s = observable_state.read();
                     (
                         s.tightening_tracker.tightening_sequence() + 1, // Next sequence number
+                        s.current_job_id.unwrap_or(1),
                         s.current_pset_id.unwrap_or(1),
+                        s.tightening_tracker.batch_size(),
                     )
                 };
 
@@ -606,11 +786,6 @@ async fn start_auto_tightening(
                 // Determine overall status for tracker
                 let overall_ok = multi_result.is_ok();
 
-                // Broadcast multi-spindle result (MID 0101)
-                observable_state.broadcast(SimulatorEvent::MultiSpindleResultCompleted {
-                    result: multi_result,
-                });
-
                 // Broadcast "Completed" status (MID 0091)
                 let completed_status = MultiSpindleStatus::completed(
                     multi_spindle_config.sync_id,
@@ -620,24 +795,39 @@ async fn start_auto_tightening(
                     status: completed_status,
                 });
 
-                // Update tracker with overall status
-                let (batch_counter, batch_completed, target_size) = {
-                    let mut s = observable_state.write();
-                    let info = s.tightening_tracker.add_tightening(overall_ok);
-                    let batch_completed = s.tightening_tracker.is_complete();
-                    let target = s.tightening_tracker.batch_size();
-                    (info.counter, batch_completed, target)
+                let (batch_counter, batch_completed, target_size) = record_tightening_completion(
+                    &observable_state,
+                    &pset_repository,
+                    &params,
+                    outcome.actual_torque,
+                    outcome.actual_angle,
+                    overall_ok,
+                    overall_ok,
+                    overall_ok,
+                    false,
+                );
+
+                let batch_status = {
+                    let state = observable_state.read();
+                    state
+                        .current_job_status
+                        .map(|status| status.protocol_value())
+                        .unwrap_or(if batch_completed { 1 } else { 2 })
                 };
+                observable_state.broadcast(SimulatorEvent::MultiSpindleResultCompleted {
+                    result: multi_result,
+                    job_id,
+                    pset_id,
+                    batch_size: operation_batch_size,
+                    batch_counter,
+                    batch_status,
+                });
 
                 // Broadcast auto-tightening progress
                 let is_running = auto_active.load(Ordering::Relaxed);
                 observable_state.broadcast_auto_progress(batch_counter, target_size, is_running);
 
-                if batch_completed {
-                    let batch_event = SimulatorEvent::BatchCompleted {
-                        total: batch_counter,
-                    };
-                    observable_state.broadcast(batch_event);
+                if batch_completed && !observable_state.read().is_job_mode() {
                     println!("Batch completed with {} tightenings", batch_counter);
                 }
             } else {
@@ -645,42 +835,23 @@ async fn start_auto_tightening(
                 // SINGLE-SPINDLE PATH
                 // ============================================================
 
-                let (result, batch_counter, batch_completed, target_size) = {
-                    let mut s = observable_state.write();
-                    let info = s.tightening_tracker.add_tightening(final_ok);
-
-                    let result = build_tightening_result(
-                        &s,
-                        &info,
-                        outcome.actual_torque,
-                        outcome.actual_angle,
-                        final_ok,
-                        outcome.torque_ok,
-                        outcome.angle_ok,
-                        &params,
-                    );
-
-                    let batch_completed = s.tightening_tracker.is_complete();
-                    let target = s.tightening_tracker.batch_size();
-
-                    // Note: Batch is NOT auto-reset here - integrator must send new batch config (MID 0019)
-
-                    (result, info.counter, batch_completed, target)
-                };
-
-                // Broadcast to subscribed TCP clients
-                let event = SimulatorEvent::TighteningCompleted { result };
-                observable_state.broadcast(event);
+                let (batch_counter, batch_completed, target_size) = record_tightening_completion(
+                    &observable_state,
+                    &pset_repository,
+                    &params,
+                    outcome.actual_torque,
+                    outcome.actual_angle,
+                    final_ok,
+                    outcome.torque_ok,
+                    outcome.angle_ok,
+                    true,
+                );
 
                 // Broadcast auto-tightening progress
                 let is_running = auto_active.load(Ordering::Relaxed);
                 observable_state.broadcast_auto_progress(batch_counter, target_size, is_running);
 
-                if batch_completed {
-                    let batch_event = SimulatorEvent::BatchCompleted {
-                        total: batch_counter,
-                    };
-                    observable_state.broadcast(batch_event);
+                if batch_completed && !observable_state.read().is_job_mode() {
                     println!("Batch completed with {} tightenings", batch_counter);
                 }
             }
@@ -1146,6 +1317,12 @@ async fn select_pset(
     AxumState(server_state): AxumState<ServerState>,
     Path(id): Path<u32>,
 ) -> impl IntoResponse {
+    if server_state.observable_state.read().is_job_mode() {
+        return api_error(
+            StatusCode::CONFLICT,
+            "PSET selection is controlled by the active Job. Exit JobMode first.",
+        );
+    }
     // Check if PSET exists
     let pset_name = {
         let repo = server_state.pset_repository.read().unwrap();
@@ -1268,6 +1445,17 @@ async fn delete_pset(
         )
             .into_response();
     }
+    if server_state
+        .job_repository
+        .read()
+        .unwrap()
+        .references_pset(id)
+    {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!("Cannot delete PSET {id}: it is referenced by a Job"),
+        );
+    }
 
     let mut repo = server_state.pset_repository.write().unwrap();
 
@@ -1296,5 +1484,218 @@ async fn delete_pset(
             )
                 .into_response()
         }
+    }
+}
+
+fn api_error(status: StatusCode, message: impl Into<String>) -> axum::response::Response {
+    let message = message.into();
+    (
+        status,
+        Json(serde_json::json!({
+            "success": false,
+            "message": message,
+            "error": message
+        })),
+    )
+        .into_response()
+}
+
+fn validate_job(server_state: &ServerState, job: &Job) -> Result<(), (StatusCode, String)> {
+    let pset_ids = {
+        let repository = server_state.pset_repository.read().unwrap();
+        let all = repository.get_all();
+        for step in &job.steps {
+            if repository.get_by_id(step.pset_id).is_none() {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    format!("PSET {} referenced by the Job does not exist", step.pset_id),
+                ));
+            }
+        }
+        all.into_iter().map(|pset| pset.id).collect::<Vec<_>>()
+    };
+    let channel_id = server_state.observable_state.read().channel_id;
+    job.validate(&[channel_id], &pset_ids)
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))
+}
+
+async fn get_jobs(AxumState(server_state): AxumState<ServerState>) -> impl IntoResponse {
+    let jobs = server_state.job_repository.read().unwrap().get_all();
+    Json(jobs)
+}
+
+async fn get_job_by_id(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    match server_state.job_repository.read().unwrap().get_by_id(id) {
+        Some(job) => (StatusCode::OK, Json(job)).into_response(),
+        None => api_error(StatusCode::NOT_FOUND, format!("Job {id:02} not found")),
+    }
+}
+
+async fn create_job(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(job): Json<Job>,
+) -> impl IntoResponse {
+    if let Err((status, message)) = validate_job(&server_state, &job) {
+        return api_error(status, message);
+    }
+    match server_state.job_repository.write().unwrap().create(job) {
+        Ok(job) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Job created successfully",
+                "job": job
+            })),
+        )
+            .into_response(),
+        Err(message) => api_error(StatusCode::BAD_REQUEST, message),
+    }
+}
+
+async fn update_job(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+    Json(mut job): Json<Job>,
+) -> impl IntoResponse {
+    if server_state.observable_state.read().is_job_running()
+        && server_state.observable_state.read().current_job_id == Some(id)
+    {
+        return api_error(StatusCode::CONFLICT, "Cannot update a running Job");
+    }
+    if server_state
+        .job_repository
+        .read()
+        .unwrap()
+        .get_by_id(id)
+        .is_none()
+    {
+        return api_error(StatusCode::NOT_FOUND, format!("Job {id:02} not found"));
+    }
+    job.id = id;
+    if let Err((status, message)) = validate_job(&server_state, &job) {
+        return api_error(status, message);
+    }
+    match server_state.job_repository.write().unwrap().update(id, job) {
+        Ok(job) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Job updated successfully",
+                "job": job
+            })),
+        )
+            .into_response(),
+        Err(message) => api_error(StatusCode::BAD_REQUEST, message),
+    }
+}
+
+async fn delete_job(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    if server_state.observable_state.read().is_job_running()
+        && server_state.observable_state.read().current_job_id == Some(id)
+    {
+        return api_error(StatusCode::CONFLICT, "Cannot delete a running Job");
+    }
+    match server_state.job_repository.write().unwrap().delete(id) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Job deleted successfully"
+            })),
+        )
+            .into_response(),
+        Err(message) if message.contains("not found") => api_error(StatusCode::NOT_FOUND, message),
+        Err(message) => api_error(StatusCode::BAD_REQUEST, message),
+    }
+}
+
+async fn select_job(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    if server_state.observable_state.read().is_job_running() {
+        return api_error(StatusCode::CONFLICT, "A Job is already running");
+    }
+    let Some(job) = server_state.job_repository.read().unwrap().get_by_id(id) else {
+        return api_error(StatusCode::NOT_FOUND, format!("Job {id:02} not found"));
+    };
+    let pset_name = server_state
+        .pset_repository
+        .read()
+        .unwrap()
+        .get_by_id(job.steps[0].pset_id)
+        .map(|pset| pset.name);
+    match server_state.observable_state.select_job(job, pset_name) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": format!("Job {id:02} selected")
+            })),
+        )
+            .into_response(),
+        Err(message) => api_error(StatusCode::CONFLICT, message),
+    }
+}
+
+async fn restart_job(
+    AxumState(server_state): AxumState<ServerState>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    if server_state
+        .job_repository
+        .read()
+        .unwrap()
+        .get_by_id(id)
+        .is_none()
+    {
+        return api_error(StatusCode::NOT_FOUND, format!("Job {id:02} not found"));
+    }
+    let first_pset_id = {
+        let state = server_state.observable_state.read();
+        let Some(execution) = state.tightening_tracker.job_execution() else {
+            return api_error(StatusCode::CONFLICT, "Job is not active");
+        };
+        if execution.job.id != id {
+            return api_error(StatusCode::CONFLICT, "Requested Job is not active");
+        }
+        execution.job.steps[0].pset_id
+    };
+    let pset_name = server_state
+        .pset_repository
+        .read()
+        .unwrap()
+        .get_by_id(first_pset_id)
+        .map(|pset| pset.name);
+    match server_state.observable_state.restart_job(id, pset_name) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": format!("Job {id:02} restarted")
+            })),
+        )
+            .into_response(),
+        Err(message) => api_error(StatusCode::CONFLICT, message),
+    }
+}
+
+async fn clear_active_job(AxumState(server_state): AxumState<ServerState>) -> impl IntoResponse {
+    match server_state.observable_state.clear_job_mode() {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "JobMode cleared"
+            })),
+        )
+            .into_response(),
+        Err(message) => api_error(StatusCode::CONFLICT, message),
     }
 }

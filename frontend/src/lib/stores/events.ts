@@ -53,6 +53,21 @@ function matchesSearchQuery(event: SimulatorEvent, query: string): boolean {
 			);
 		case 'ToolStateChanged':
 			return event.enabled.toString().includes(query);
+		case 'JobSelected':
+		case 'JobProgress':
+		case 'JobRestarted':
+		case 'JobCompleted':
+			return (
+				event.state.job_name.toLowerCase().includes(query) ||
+				event.state.job_id.toString().includes(query) ||
+				event.state.status.includes(query)
+			);
+		case 'JobStepChanged':
+			return (
+				event.state.job_name.toLowerCase().includes(query) ||
+				event.state.job_id.toString().includes(query) ||
+				event.state.current_step.toString().includes(query)
+			);
 		default:
 			return false;
 	}

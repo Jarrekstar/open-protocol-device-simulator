@@ -2,11 +2,16 @@
 	import '../app.css';
 	import { AppShell, AppBar } from '@skeletonlabs/skeleton';
 	import { onMount, onDestroy } from 'svelte';
-	import { connectWebSocket, disconnectWebSocket } from '$lib/stores/websocket';
+	import {
+		connectWebSocket,
+		disconnectWebSocket,
+		refreshDeviceState
+	} from '$lib/stores/websocket';
 	import { Navigation, ThemeToggle, ConnectionStatus } from '$lib/components/layout';
 	import { ToastContainer, ErrorBoundary } from '$lib/components/ui';
 
 	onMount(() => {
+		refreshDeviceState().catch(() => {});
 		connectWebSocket();
 	});
 

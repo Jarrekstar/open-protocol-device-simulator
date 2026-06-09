@@ -3,9 +3,15 @@ import { deviceState } from './device';
 import { addEvent } from './events';
 import { addTighteningResult, autoTighteningProgress } from './tightening';
 import { WEBSOCKET } from '$lib/config/constants';
-import { getWebSocketUrl } from '$lib/config/env';
+import { getApiBaseUrl, getWebSocketUrl } from '$lib/config/env';
 import { logger } from '$lib/utils';
-import type { SimulatorEvent, DeviceState, MultiSpindleConfig, FailureConfig } from '$lib/types';
+import type {
+	SimulatorEvent,
+	DeviceState,
+	MultiSpindleConfig,
+	FailureConfig,
+	JobRuntimeState
+} from '$lib/types';
 
 export const connected = writable(false);
 export const reconnectAttempts = writable(0);
@@ -38,6 +44,14 @@ interface BackendDeviceState {
 	device_fsm_state: string; // Maps to tool_state in frontend
 	vehicle_id: string | null; // Maps to vehicle_id_number in frontend
 	current_job_id: number | null;
+	current_job_name: string | null;
+	current_job_status: DeviceState['current_job_status'];
+	current_job_step: number | null;
+	current_job_step_progress: number;
+	current_job_step_batch_size: number;
+	current_job_total_progress: number;
+	current_job_total_steps: number;
+	current_job_total_batch_size: number;
 	current_pset_id: number | null;
 	current_pset_name: string | null;
 	multi_spindle_config: MultiSpindleConfig;
@@ -75,11 +89,31 @@ function mapDeviceState(data: BackendDeviceState): DeviceState {
 		tool_state: data.device_fsm_state, // Backend sends device_fsm_state, map to tool_state
 		vehicle_id_number: data.vehicle_id ?? null, // Backend sends vehicle_id, map to vehicle_id_number
 		current_job_id: data.current_job_id,
+		current_job_name: data.current_job_name ?? null,
+		current_job_status: data.current_job_status ?? null,
+		current_job_step: data.current_job_step ?? null,
+		current_job_step_progress: data.current_job_step_progress ?? 0,
+		current_job_step_batch_size: data.current_job_step_batch_size ?? 0,
+		current_job_total_progress: data.current_job_total_progress ?? 0,
+		current_job_total_steps: data.current_job_total_steps ?? 0,
+		current_job_total_batch_size: data.current_job_total_batch_size ?? 0,
 		current_pset_id: data.current_pset_id,
 		current_pset_name: data.current_pset_name,
 		multi_spindle_config: data.multi_spindle_config,
 		failure_config: data.failure_config
 	};
+}
+
+export async function refreshDeviceState(): Promise<void> {
+	const response = await fetch(`${getApiBaseUrl()}/state`);
+	if (!response.ok) {
+		throw new Error(`Failed to load device state: ${response.status}`);
+	}
+	const data: unknown = await response.json();
+	if (!isDeviceState(data)) {
+		throw new Error('Device state response has an invalid shape');
+	}
+	deviceState.set(mapDeviceState(data));
 }
 
 /**
@@ -182,6 +216,24 @@ type EventHandlerMap = {
 	[K in SimulatorEvent['type']]: (event: Extract<SimulatorEvent, { type: K }>) => void;
 };
 
+function applyJobState(runtime: JobRuntimeState) {
+	deviceState.update((state) => {
+		if (state) {
+			state.current_job_id = runtime.job_id;
+			state.current_job_name = runtime.job_name;
+			state.current_job_status = runtime.status;
+			state.current_job_step = runtime.current_step;
+			state.current_job_step_progress = runtime.step_progress;
+			state.current_job_step_batch_size = runtime.step_batch_size;
+			state.current_job_total_progress = runtime.total_progress;
+			state.current_job_total_steps = runtime.total_steps;
+			state.current_job_total_batch_size = runtime.total_batch_size;
+			state.current_pset_id = runtime.current_pset_id;
+		}
+		return state;
+	});
+}
+
 /**
  * Event handler map with automatic type narrowing
  * TypeScript enforces that all event types are handled
@@ -234,6 +286,26 @@ const eventHandlers: EventHandlerMap = {
 	},
 	BatchCompleted: (event) => {
 		addEvent(event);
+	},
+	JobSelected: (event) => {
+		applyJobState(event.state);
+		addEvent(event);
+	},
+	JobProgress: (event) => {
+		applyJobState(event.state);
+		addEvent(event);
+	},
+	JobStepChanged: (event) => {
+		applyJobState(event.state);
+		addEvent(event);
+	},
+	JobRestarted: (event) => {
+		applyJobState(event.state);
+		addEvent(event);
+	},
+	JobCompleted: (event) => {
+		applyJobState(event.state);
+		addEvent(event);
 	}
 };
 
@@ -266,6 +338,21 @@ function dispatchEvent(event: SimulatorEvent): void {
 			break;
 		case 'BatchCompleted':
 			eventHandlers.BatchCompleted(event);
+			break;
+		case 'JobSelected':
+			eventHandlers.JobSelected(event);
+			break;
+		case 'JobProgress':
+			eventHandlers.JobProgress(event);
+			break;
+		case 'JobStepChanged':
+			eventHandlers.JobStepChanged(event);
+			break;
+		case 'JobRestarted':
+			eventHandlers.JobRestarted(event);
+			break;
+		case 'JobCompleted':
+			eventHandlers.JobCompleted(event);
 			break;
 		default:
 			// Exhaustiveness check - TypeScript will error if a case is missing

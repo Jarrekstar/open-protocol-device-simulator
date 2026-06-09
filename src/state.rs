@@ -1,6 +1,8 @@
+use crate::batch_manager::TighteningInfo;
 use crate::config::DeviceConfig;
 use crate::device_fsm::DeviceFSMState;
 use crate::failure_simulator::FailureConfig;
+use crate::job::{Job, JobProgress, JobRuntimeState, JobStatus};
 use crate::multi_spindle::MultiSpindleConfig;
 use crate::tightening_tracker::TighteningTracker;
 use serde::Serialize;
@@ -31,6 +33,14 @@ pub struct DeviceState {
     // Vehicle/Job identification
     pub vehicle_id: Option<String>,
     pub current_job_id: Option<u32>,
+    pub current_job_name: Option<String>,
+    pub current_job_status: Option<JobStatus>,
+    pub current_job_step: Option<u32>,
+    pub current_job_step_progress: u32,
+    pub current_job_step_batch_size: u32,
+    pub current_job_total_progress: u32,
+    pub current_job_total_steps: u32,
+    pub current_job_total_batch_size: u32,
 
     // Multi-spindle configuration
     pub multi_spindle_config: MultiSpindleConfig,
@@ -54,6 +64,14 @@ impl DeviceState {
             tool_enabled: true,
             vehicle_id: None,
             current_job_id: Some(1),
+            current_job_name: None,
+            current_job_status: None,
+            current_job_step: None,
+            current_job_step_progress: 0,
+            current_job_step_batch_size: 0,
+            current_job_total_progress: 0,
+            current_job_total_steps: 0,
+            current_job_total_batch_size: 0,
             multi_spindle_config: MultiSpindleConfig::default(),
             failure_config: FailureConfig::default(),
         }
@@ -73,6 +91,14 @@ impl DeviceState {
             tool_enabled: true,
             vehicle_id: None,
             current_job_id: Some(1),
+            current_job_name: None,
+            current_job_status: None,
+            current_job_step: None,
+            current_job_step_progress: 0,
+            current_job_step_batch_size: 0,
+            current_job_total_progress: 0,
+            current_job_total_steps: 0,
+            current_job_total_batch_size: 0,
             multi_spindle_config: MultiSpindleConfig::default(),
             failure_config: FailureConfig::default(),
         }
@@ -94,6 +120,107 @@ impl DeviceState {
         self.current_pset_name = pset_name;
     }
 
+    pub fn select_job(&mut self, job: Job, pset_name: Option<String>) -> Result<(), String> {
+        if self.tightening_tracker.is_job_running() {
+            return Err("A Job is already running".to_string());
+        }
+        let first_pset_id = job
+            .steps
+            .first()
+            .ok_or_else(|| "A Job must contain at least one step".to_string())?
+            .pset_id;
+        self.tightening_tracker.start_job(job);
+        self.set_pset(first_pset_id, pset_name);
+        self.tool_enabled = true;
+        self.refresh_job_fields();
+        Ok(())
+    }
+
+    pub fn restart_job(&mut self, job_id: u32, pset_name: Option<String>) -> Result<(), String> {
+        if !self.tightening_tracker.restart_job(job_id) {
+            return Err("Job not running".to_string());
+        }
+        let first_pset_id = self
+            .tightening_tracker
+            .job_execution()
+            .expect("Job execution exists after restart")
+            .current_step()
+            .pset_id;
+        self.set_pset(first_pset_id, pset_name);
+        self.tool_enabled = true;
+        self.refresh_job_fields();
+        Ok(())
+    }
+
+    pub fn clear_job_mode(&mut self) -> Result<(), String> {
+        if self.tightening_tracker.is_job_running() {
+            return Err("Cannot clear JobMode while a Job is running".to_string());
+        }
+        self.tightening_tracker.exit_job();
+        self.current_job_id = None;
+        self.current_job_name = None;
+        self.current_job_status = None;
+        self.current_job_step = None;
+        self.current_job_step_progress = 0;
+        self.current_job_step_batch_size = 0;
+        self.current_job_total_progress = 0;
+        self.current_job_total_steps = 0;
+        self.current_job_total_batch_size = 0;
+        Ok(())
+    }
+
+    pub fn is_job_mode(&self) -> bool {
+        self.tightening_tracker.is_job_mode()
+    }
+
+    pub fn is_job_running(&self) -> bool {
+        self.tightening_tracker.is_job_running()
+    }
+
+    pub fn job_runtime_state(&self) -> Option<JobRuntimeState> {
+        self.tightening_tracker.job_runtime_state()
+    }
+
+    pub fn add_tightening(&mut self, ok: bool) -> TighteningInfo {
+        let info = self.tightening_tracker.add_tightening(ok);
+        self.apply_job_progress(info.job_progress.as_ref());
+        info
+    }
+
+    fn apply_job_progress(&mut self, progress: Option<&JobProgress>) {
+        if let Some(progress) = progress {
+            if progress.step_changed
+                && let Some(execution) = self.tightening_tracker.job_execution()
+            {
+                self.current_pset_id = Some(execution.current_step().pset_id);
+                self.current_pset_name = None;
+            }
+            if progress.completed_status.is_some()
+                && let Some(execution) = self.tightening_tracker.job_execution()
+                && execution.job.lock_at_job_done
+                && !execution.job.repeat_job
+            {
+                self.tool_enabled = false;
+            }
+            self.refresh_job_fields();
+        }
+    }
+
+    pub fn refresh_job_fields(&mut self) {
+        let Some(runtime) = self.tightening_tracker.job_runtime_state() else {
+            return;
+        };
+        self.current_job_id = Some(runtime.job_id);
+        self.current_job_name = Some(runtime.job_name);
+        self.current_job_status = Some(runtime.status);
+        self.current_job_step = Some(runtime.current_step);
+        self.current_job_step_progress = runtime.step_progress;
+        self.current_job_step_batch_size = runtime.step_batch_size;
+        self.current_job_total_progress = runtime.total_progress;
+        self.current_job_total_steps = runtime.total_steps;
+        self.current_job_total_batch_size = runtime.total_batch_size;
+    }
+
     /// Set batch size (enables batch mode)
     pub fn set_batch_size(&mut self, size: u32) {
         self.tightening_tracker.enable_batch(size);
@@ -101,7 +228,17 @@ impl DeviceState {
 
     /// Increment batch counter without tightening (MID 0128 - skip bolt)
     pub fn increment_batch(&mut self) -> u32 {
-        self.tightening_tracker.increment_batch()
+        self.increment_batch_with_progress().0
+    }
+
+    pub fn increment_batch_with_progress(&mut self) -> (u32, Option<JobProgress>) {
+        if let Some(progress) = self.tightening_tracker.increment_with_job_progress() {
+            let counter = progress.step_counter;
+            self.apply_job_progress(Some(&progress));
+            (counter, Some(progress))
+        } else {
+            (self.tightening_tracker.increment_batch(), None)
+        }
     }
 
     /// Reset batch counter (MID 0020)
@@ -221,5 +358,57 @@ mod tests {
             let s = state.read().unwrap();
             assert_eq!(s.current_pset_id, Some(5));
         }
+    }
+
+    fn test_job(lock_at_done: bool) -> Job {
+        Job {
+            id: 7,
+            name: "Runtime".to_string(),
+            forced_order: 1,
+            first_tightening_timeout: 0,
+            job_timeout: 0,
+            batch_count_mode: 0,
+            lock_at_job_done: lock_at_done,
+            use_line_control: false,
+            repeat_job: false,
+            loosening_mode: 0,
+            repair_mode: 0,
+            steps: vec![crate::job::JobStep {
+                channel_id: 1,
+                pset_id: 1,
+                auto_value: true,
+                batch_size: 1,
+            }],
+        }
+    }
+
+    #[test]
+    fn job_completion_locks_tool_and_restart_resets_progress() {
+        let mut state = DeviceState::new();
+        state
+            .select_job(test_job(true), Some("Light Duty".to_string()))
+            .unwrap();
+        state.add_tightening(true);
+        assert_eq!(state.current_job_status, Some(JobStatus::Ok));
+        assert!(!state.tool_enabled);
+
+        state
+            .restart_job(7, Some("Light Duty".to_string()))
+            .unwrap();
+        assert_eq!(state.current_job_status, Some(JobStatus::Running));
+        assert_eq!(state.current_job_total_progress, 0);
+        assert!(state.tool_enabled);
+    }
+
+    #[test]
+    fn job_mode_mid_0128_style_increment_advances_progress() {
+        let mut state = DeviceState::new();
+        state
+            .select_job(test_job(false), Some("Light Duty".to_string()))
+            .unwrap();
+        let (counter, progress) = state.increment_batch_with_progress();
+        assert_eq!(counter, 1);
+        assert!(progress.is_some());
+        assert_eq!(state.current_job_status, Some(JobStatus::Ok));
     }
 }

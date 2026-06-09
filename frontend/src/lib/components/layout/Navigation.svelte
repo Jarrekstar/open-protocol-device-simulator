@@ -5,6 +5,7 @@
 		{ href: '/', label: 'Dashboard' },
 		{ href: '/control', label: 'Control Panel' },
 		{ href: '/psets', label: 'PSETs' },
+		{ href: '/jobs', label: 'Jobs' },
 		{ href: '/events', label: 'Events' }
 	];
 </script>

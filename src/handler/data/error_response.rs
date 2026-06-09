@@ -17,24 +17,28 @@ pub struct ErrorResponse {
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 pub enum ErrorCode {
-    /// MID revision not supported
-    MidRevisionUnsupported = 1,
+    /// Invalid data
+    InvalidData = 1,
     /// Controller not ready
     ControllerNotReady = 2,
     /// Client already connected
     ClientAlreadyConnected = 3,
-    /// Invalid data
-    InvalidData = 4,
     /// Parameter set not found
     ParameterSetNotFound = 5,
     /// Job not found
-    JobNotFound = 6,
+    JobNotFound = 17,
     /// Vehicle ID input source not granted
     VehicleIdNotGranted = 7,
     /// Subscription already exists
-    SubscriptionAlreadyExists = 8,
+    SubscriptionAlreadyExists = 18,
     /// Subscription does not exist
-    SubscriptionDoesNotExist = 9,
+    SubscriptionDoesNotExist = 19,
+    /// Requested Job cannot be selected
+    JobCannotBeSet = 20,
+    /// Requested Job is not the active Job
+    JobNotRunning = 21,
+    /// MID revision not supported
+    MidRevisionUnsupported = 97,
     /// Generic error
     GenericError = 99,
 }
@@ -106,6 +110,6 @@ mod tests {
     fn test_revision_unsupported() {
         let error = ErrorResponse::revision_unsupported(1);
         let data = error.serialize();
-        assert_eq!(&data[..], b"000101");
+        assert_eq!(&data[..], b"000197");
     }
 }

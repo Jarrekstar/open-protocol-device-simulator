@@ -142,6 +142,22 @@ impl ConnectionSession<Ready> {
         &mut self.state.subscriptions
     }
 
+    pub fn apply_subscription_message(&mut self, mid: u16) {
+        match mid {
+            60 => self.subscribe_tightening_result(),
+            63 => self.unsubscribe_tightening_result(),
+            14 => self.subscribe_pset_selection(),
+            17 => self.unsubscribe_pset_selection(),
+            51 => self.subscribe_vehicle_id(),
+            54 => self.unsubscribe_vehicle_id(),
+            90 => self.subscribe_multi_spindle_status(),
+            92 => self.unsubscribe_multi_spindle_status(),
+            100 => self.subscribe_multi_spindle_result(),
+            103 => self.unsubscribe_multi_spindle_result(),
+            _ => {}
+        }
+    }
+
     /// Get immutable reference to subscriptions
     pub fn subscriptions(&self) -> &Subscriptions {
         &self.state.subscriptions

@@ -1,4 +1,5 @@
 use crate::batch_manager::{BatchManager, BatchStatus, TighteningInfo};
+use crate::job::{Job, JobExecution, JobRuntimeState, JobStatus};
 use serde::Serialize;
 
 /// Operating mode for tightening operations
@@ -12,6 +13,8 @@ pub enum TighteningMode {
     /// Triggered when integrator sends MID 0019 (set batch size)
     /// Device tracks progress through the batch
     Batch(BatchManager),
+    /// JobMode: the selected Job owns PSET selection and batch progression.
+    Job(JobExecution),
 }
 
 /// Tracks tightening operations across both single and batch modes
@@ -36,6 +39,45 @@ impl TighteningTracker {
         self.mode = TighteningMode::Batch(BatchManager::new(size));
     }
 
+    pub fn start_job(&mut self, job: Job) {
+        self.mode = TighteningMode::Job(JobExecution::new(job));
+    }
+
+    pub fn exit_job(&mut self) {
+        if matches!(self.mode, TighteningMode::Job(_)) {
+            self.mode = TighteningMode::Single;
+        }
+    }
+
+    pub fn restart_job(&mut self, job_id: u32) -> bool {
+        match &mut self.mode {
+            TighteningMode::Job(execution) if execution.job.id == job_id => {
+                execution.restart();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn is_job_mode(&self) -> bool {
+        matches!(self.mode, TighteningMode::Job(_))
+    }
+
+    pub fn is_job_running(&self) -> bool {
+        matches!(&self.mode, TighteningMode::Job(execution) if execution.is_running())
+    }
+
+    pub fn job_execution(&self) -> Option<&JobExecution> {
+        match &self.mode {
+            TighteningMode::Job(execution) => Some(execution),
+            _ => None,
+        }
+    }
+
+    pub fn job_runtime_state(&self) -> Option<JobRuntimeState> {
+        self.job_execution().map(JobExecution::runtime_state)
+    }
+
     /// Check if in batch mode
     ///
     /// Mode query method for tightening operation state.
@@ -58,6 +100,7 @@ impl TighteningTracker {
                     counter: 0,
                     tightening_id: self.tightening_sequence,
                     batch_status: BatchStatus::NotUsed,
+                    job_progress: None,
                 }
             }
             TighteningMode::Batch(batch_manager) => {
@@ -65,6 +108,20 @@ impl TighteningTracker {
                 let mut info = batch_manager.add_tightening(ok);
                 info.tightening_id = self.tightening_sequence;
                 info
+            }
+            TighteningMode::Job(execution) => {
+                let progress = execution.record_tightening(ok);
+                let batch_status = match progress.completed_status {
+                    Some(JobStatus::Ok) => BatchStatus::CompletedOk,
+                    Some(JobStatus::Nok) => BatchStatus::CompletedNok,
+                    _ => BatchStatus::NotFinished,
+                };
+                TighteningInfo {
+                    counter: progress.step_counter,
+                    tightening_id: self.tightening_sequence,
+                    batch_status,
+                    job_progress: Some(progress),
+                }
             }
         }
     }
@@ -75,6 +132,7 @@ impl TighteningTracker {
         match &self.mode {
             TighteningMode::Single => 0,
             TighteningMode::Batch(batch) => batch.target_size(),
+            TighteningMode::Job(execution) => execution.current_step().batch_size,
         }
     }
 
@@ -84,6 +142,7 @@ impl TighteningTracker {
         match &self.mode {
             TighteningMode::Single => 0,
             TighteningMode::Batch(batch) => batch.counter(),
+            TighteningMode::Job(execution) => execution.step_counter,
         }
     }
 
@@ -94,6 +153,7 @@ impl TighteningTracker {
         match &self.mode {
             TighteningMode::Single => false, // Never wait in single mode
             TighteningMode::Batch(batch) => batch.is_complete(),
+            TighteningMode::Job(execution) => !execution.is_running(),
         }
     }
 
@@ -105,6 +165,11 @@ impl TighteningTracker {
             TighteningMode::Batch(batch) => {
                 Some(batch.target_size().saturating_sub(batch.counter()))
             }
+            TighteningMode::Job(execution) => Some(
+                execution
+                    .total_batch_size
+                    .saturating_sub(execution.total_counter),
+            ),
         }
     }
 
@@ -113,6 +178,7 @@ impl TighteningTracker {
         match &self.mode {
             TighteningMode::Single => false, // Never "complete" in single mode
             TighteningMode::Batch(batch) => batch.is_complete(),
+            TighteningMode::Job(execution) => !execution.is_running(),
         }
     }
 
@@ -133,6 +199,7 @@ impl TighteningTracker {
         match &mut self.mode {
             TighteningMode::Single => 0, // No-op in single mode
             TighteningMode::Batch(batch_manager) => batch_manager.increment(),
+            TighteningMode::Job(execution) => execution.increment().step_counter,
         }
     }
 
@@ -146,6 +213,14 @@ impl TighteningTracker {
                 batch_manager.reset();
                 true
             }
+            TighteningMode::Job(_) => false,
+        }
+    }
+
+    pub fn increment_with_job_progress(&mut self) -> Option<crate::job::JobProgress> {
+        match &mut self.mode {
+            TighteningMode::Job(execution) if execution.is_running() => Some(execution.increment()),
+            _ => None,
         }
     }
 }

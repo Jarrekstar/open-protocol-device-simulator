@@ -6,6 +6,14 @@ export interface DeviceState {
 	tool_state: string;
 	vehicle_id_number: string | null;
 	current_job_id: number | null;
+	current_job_name: string | null;
+	current_job_status: import('./Job').JobStatus | null;
+	current_job_step: number | null;
+	current_job_step_progress: number;
+	current_job_step_batch_size: number;
+	current_job_total_progress: number;
+	current_job_total_steps: number;
+	current_job_total_batch_size: number;
 	current_pset_id: number | null;
 	current_pset_name: string | null;
 	multi_spindle_config: MultiSpindleConfig;

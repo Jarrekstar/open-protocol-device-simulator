@@ -6,7 +6,7 @@ edition = "2024"
 
 [dependencies]
 axum = { version = "0.8.8", features = ["ws"] }
-chrono = "0.4.43"
+chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive", "env"] }
 config = { version = "0.15.19", default-features = false, features = ["toml"] }
 futures-util = { version = "0.3.31", features = ["sink"] }

@@ -5,7 +5,8 @@ import type {
 	TighteningRequest,
 	FailureConfig,
 	FailureConfigRequest,
-	Pset
+	Pset,
+	Job
 } from '$lib/types';
 import { getApiBaseUrl } from '$lib/config/env';
 
@@ -202,6 +203,52 @@ export class ApiClient {
 	async deletePset(id: number) {
 		return this.request<{ success: boolean; message: string }>(`/psets/${id}`, {
 			method: 'DELETE'
+		});
+	}
+
+	async getJobs() {
+		return this.request<Job[]>('/jobs');
+	}
+
+	async getJobById(id: number) {
+		return this.request<Job>(`/jobs/${id}`);
+	}
+
+	async createJob(job: Job) {
+		return this.request<{ success: boolean; message: string; job: Job }>('/jobs', {
+			method: 'POST',
+			body: JSON.stringify(job)
+		});
+	}
+
+	async updateJob(id: number, job: Job) {
+		return this.request<{ success: boolean; message: string; job: Job }>(`/jobs/${id}`, {
+			method: 'PUT',
+			body: JSON.stringify(job)
+		});
+	}
+
+	async deleteJob(id: number) {
+		return this.request<{ success: boolean; message: string }>(`/jobs/${id}`, {
+			method: 'DELETE'
+		});
+	}
+
+	async selectJob(id: number) {
+		return this.request<{ success: boolean; message: string }>(`/jobs/${id}/select`, {
+			method: 'POST'
+		});
+	}
+
+	async restartJob(id: number) {
+		return this.request<{ success: boolean; message: string }>(`/jobs/${id}/restart`, {
+			method: 'POST'
+		});
+	}
+
+	async clearActiveJob() {
+		return this.request<{ success: boolean; message: string }>('/jobs/active/clear', {
+			method: 'POST'
 		});
 	}
 }

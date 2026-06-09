@@ -21,8 +21,8 @@ pub struct Subscriptions {
     /// Subscribed to alarm events (not yet implemented)
     pub alarm: bool,
 
-    /// Subscribed to job info events (not yet implemented)
-    pub job_info: bool,
+    /// Requested MID 0035 revision for this connection.
+    pub job_info_revision: Option<u8>,
 }
 
 impl Subscriptions {
@@ -106,6 +106,23 @@ impl Subscriptions {
         self.multi_spindle_result
     }
 
+    pub fn subscribe_job_info(&mut self, revision: u8) -> bool {
+        if self.job_info_revision.is_some() {
+            false
+        } else {
+            self.job_info_revision = Some(revision);
+            true
+        }
+    }
+
+    pub fn unsubscribe_job_info(&mut self) -> bool {
+        self.job_info_revision.take().is_some()
+    }
+
+    pub fn job_info_revision(&self) -> Option<u8> {
+        self.job_info_revision
+    }
+
     /// Get count of active subscriptions
     ///
     /// Diagnostic method for subscription statistics.
@@ -132,7 +149,7 @@ impl Subscriptions {
         if self.alarm {
             count += 1;
         }
-        if self.job_info {
+        if self.job_info_revision.is_some() {
             count += 1;
         }
         count

@@ -1,4 +1,5 @@
 use crate::handler::data::TighteningResult;
+use crate::job::JobRuntimeState;
 use crate::multi_spindle::{MultiSpindleResult, MultiSpindleStatus};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -9,31 +10,68 @@ use tokio::sync::broadcast;
 #[allow(dead_code)]
 pub enum SimulatorEvent {
     /// A tightening operation was completed
-    TighteningCompleted { result: TighteningResult },
+    TighteningCompleted {
+        result: TighteningResult,
+    },
 
     /// A parameter set was selected
-    PsetChanged { pset_id: u32, pset_name: String },
+    PsetChanged {
+        pset_id: u32,
+        pset_name: String,
+    },
 
     /// Tool state changed (enabled/disabled)
-    ToolStateChanged { enabled: bool },
+    ToolStateChanged {
+        enabled: bool,
+    },
 
     /// Batch was completed
-    BatchCompleted { total: u32 },
+    BatchCompleted {
+        total: u32,
+    },
 
     /// Vehicle ID was changed
-    VehicleIdChanged { vin: String },
+    VehicleIdChanged {
+        vin: String,
+    },
 
     /// Multi-spindle status update completed
-    MultiSpindleStatusCompleted { status: MultiSpindleStatus },
+    MultiSpindleStatusCompleted {
+        status: MultiSpindleStatus,
+    },
 
     /// Multi-spindle tightening result completed
-    MultiSpindleResultCompleted { result: MultiSpindleResult },
+    MultiSpindleResultCompleted {
+        result: MultiSpindleResult,
+        job_id: u32,
+        pset_id: u32,
+        batch_size: u32,
+        batch_counter: u32,
+        batch_status: u8,
+    },
 
     /// Auto-tightening progress update
     AutoTighteningProgress {
         counter: u32,
         target_size: u32,
         running: bool,
+    },
+
+    JobSelected {
+        state: JobRuntimeState,
+    },
+    JobProgress {
+        state: JobRuntimeState,
+    },
+    JobStepChanged {
+        state: JobRuntimeState,
+        previous_step: u32,
+    },
+    JobRestarted {
+        state: JobRuntimeState,
+    },
+    JobCompleted {
+        state: JobRuntimeState,
     },
 }
 
