@@ -159,7 +159,7 @@ impl MultiSpindleResult {
         Self {
             result_id,
             sync_id,
-            timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            timestamp: chrono::Local::now().format("%Y-%m-%d:%H:%M:%S").to_string(),
             overall_status,
             spindle_count,
             spindle_results,

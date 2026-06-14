@@ -34,9 +34,12 @@ pub fn parse_message(data: &[u8]) -> Result<Message, ProtocolError> {
     // Parse revision (bytes 8-11)
     let revision_str = str::from_utf8(&data[8..11])
         .map_err(|_| ProtocolError::InvalidRevision("not valid UTF-8".to_string()))?;
-    let revision = revision_str
-        .parse::<u8>()
-        .map_err(|_| ProtocolError::InvalidRevision(revision_str.to_string()))?;
+    let revision = match revision_str {
+        "   " | "000" | "001" => 1,
+        value => value
+            .parse::<u16>()
+            .map_err(|_| ProtocolError::InvalidRevision(revision_str.to_string()))?,
+    };
 
     // Extract optional data payload (bytes 20+)
     let data_payload = if data.len() > HEADER_SIZE {
@@ -75,6 +78,24 @@ mod tests {
         assert_eq!(msg.mid, 50);
         assert_eq!(msg.revision, 1);
         assert_eq!(msg.data.len(), 25);
+    }
+
+    #[test]
+    fn revision_one_aliases_are_normalized() {
+        for raw in [
+            b"00200001            ".as_slice(),
+            b"00200001000         ".as_slice(),
+            b"00200001001         ".as_slice(),
+        ] {
+            let msg = parse_message(raw).unwrap();
+            assert_eq!(msg.revision, 1);
+        }
+    }
+
+    #[test]
+    fn parses_extended_revision_values() {
+        let msg = parse_message(b"00200061998         ").unwrap();
+        assert_eq!(msg.revision, 998);
     }
 
     #[test]

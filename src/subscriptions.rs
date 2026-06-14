@@ -1,3 +1,4 @@
+use crate::protocol::revision::MidRevision;
 use serde::Serialize;
 
 /// Manages client subscription state for various event types
@@ -21,8 +22,19 @@ pub struct Subscriptions {
     /// Subscribed to alarm events (not yet implemented)
     pub alarm: bool,
 
+    #[serde(skip)]
+    tightening_result_revision: Option<MidRevision>,
+    #[serde(skip)]
+    pset_selection_revision: Option<MidRevision>,
+    #[serde(skip)]
+    vehicle_id_revision: Option<MidRevision>,
+    #[serde(skip)]
+    multi_spindle_status_revision: Option<MidRevision>,
+    #[serde(skip)]
+    multi_spindle_result_revision: Option<MidRevision>,
+
     /// Requested MID 0035 revision for this connection.
-    pub job_info_revision: Option<u8>,
+    pub job_info_revision: Option<MidRevision>,
 }
 
 impl Subscriptions {
@@ -33,22 +45,34 @@ impl Subscriptions {
 
     /// Subscribe to tightening result events
     pub fn subscribe_tightening_result(&mut self) {
+        self.subscribe_tightening_result_revision(1);
+    }
+
+    pub fn subscribe_tightening_result_revision(&mut self, revision: MidRevision) {
         self.tightening_result = true;
+        self.tightening_result_revision = Some(revision);
     }
 
     /// Unsubscribe from tightening result events
     pub fn unsubscribe_tightening_result(&mut self) {
         self.tightening_result = false;
+        self.tightening_result_revision = None;
     }
 
     /// Subscribe to parameter set selection events
     pub fn subscribe_pset_selection(&mut self) {
+        self.subscribe_pset_selection_revision(1);
+    }
+
+    pub fn subscribe_pset_selection_revision(&mut self, revision: MidRevision) {
         self.pset_selection = true;
+        self.pset_selection_revision = Some(revision);
     }
 
     /// Unsubscribe from parameter set selection events
     pub fn unsubscribe_pset_selection(&mut self) {
         self.pset_selection = false;
+        self.pset_selection_revision = None;
     }
 
     /// Check if subscribed to tightening results
@@ -61,14 +85,28 @@ impl Subscriptions {
         self.pset_selection
     }
 
+    pub fn tightening_result_revision(&self) -> Option<MidRevision> {
+        self.tightening_result_revision
+    }
+
+    pub fn pset_selection_revision(&self) -> Option<MidRevision> {
+        self.pset_selection_revision
+    }
+
     /// Subscribe to vehicle ID events
     pub fn subscribe_vehicle_id(&mut self) {
+        self.subscribe_vehicle_id_revision(1);
+    }
+
+    pub fn subscribe_vehicle_id_revision(&mut self, revision: MidRevision) {
         self.vehicle_id = true;
+        self.vehicle_id_revision = Some(revision);
     }
 
     /// Unsubscribe from vehicle ID events
     pub fn unsubscribe_vehicle_id(&mut self) {
         self.vehicle_id = false;
+        self.vehicle_id_revision = None;
     }
 
     /// Check if subscribed to vehicle ID
@@ -76,14 +114,24 @@ impl Subscriptions {
         self.vehicle_id
     }
 
+    pub fn vehicle_id_revision(&self) -> Option<MidRevision> {
+        self.vehicle_id_revision
+    }
+
     /// Subscribe to multi-spindle status events
     pub fn subscribe_multi_spindle_status(&mut self) {
+        self.subscribe_multi_spindle_status_revision(1);
+    }
+
+    pub fn subscribe_multi_spindle_status_revision(&mut self, revision: MidRevision) {
         self.multi_spindle_status = true;
+        self.multi_spindle_status_revision = Some(revision);
     }
 
     /// Unsubscribe from multi-spindle status events
     pub fn unsubscribe_multi_spindle_status(&mut self) {
         self.multi_spindle_status = false;
+        self.multi_spindle_status_revision = None;
     }
 
     /// Check if subscribed to multi-spindle status
@@ -91,14 +139,24 @@ impl Subscriptions {
         self.multi_spindle_status
     }
 
+    pub fn multi_spindle_status_revision(&self) -> Option<MidRevision> {
+        self.multi_spindle_status_revision
+    }
+
     /// Subscribe to multi-spindle result events
     pub fn subscribe_multi_spindle_result(&mut self) {
+        self.subscribe_multi_spindle_result_revision(1);
+    }
+
+    pub fn subscribe_multi_spindle_result_revision(&mut self, revision: MidRevision) {
         self.multi_spindle_result = true;
+        self.multi_spindle_result_revision = Some(revision);
     }
 
     /// Unsubscribe from multi-spindle result events
     pub fn unsubscribe_multi_spindle_result(&mut self) {
         self.multi_spindle_result = false;
+        self.multi_spindle_result_revision = None;
     }
 
     /// Check if subscribed to multi-spindle result
@@ -106,7 +164,11 @@ impl Subscriptions {
         self.multi_spindle_result
     }
 
-    pub fn subscribe_job_info(&mut self, revision: u8) -> bool {
+    pub fn multi_spindle_result_revision(&self) -> Option<MidRevision> {
+        self.multi_spindle_result_revision
+    }
+
+    pub fn subscribe_job_info(&mut self, revision: MidRevision) -> bool {
         if self.job_info_revision.is_some() {
             false
         } else {
@@ -119,7 +181,7 @@ impl Subscriptions {
         self.job_info_revision.take().is_some()
     }
 
-    pub fn job_info_revision(&self) -> Option<u8> {
+    pub fn job_info_revision(&self) -> Option<MidRevision> {
         self.job_info_revision
     }
 
@@ -218,5 +280,18 @@ mod tests {
 
         assert!(subs.is_subscribed_to_tightening_result());
         assert_eq!(subs.active_count(), 1);
+    }
+
+    #[test]
+    fn stores_revision_for_each_subscription_family() {
+        let mut subs = Subscriptions::new();
+        subs.subscribe_tightening_result_revision(7);
+        subs.subscribe_vehicle_id_revision(2);
+
+        assert_eq!(subs.tightening_result_revision(), Some(7));
+        assert_eq!(subs.vehicle_id_revision(), Some(2));
+
+        subs.unsubscribe_vehicle_id();
+        assert_eq!(subs.vehicle_id_revision(), None);
     }
 }

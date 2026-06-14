@@ -1,5 +1,6 @@
 use crate::protocol::field::FieldBuilder;
 use crate::protocol::response_data::ResponseData;
+use crate::protocol::revision::{MidRevision, ProtocolSampleData};
 
 /// MID 0052 - Vehicle ID Number (broadcast to subscribers)
 ///
@@ -10,25 +11,49 @@ use crate::protocol::response_data::ResponseData;
 pub struct VehicleIdBroadcast {
     /// VIN number (25 characters)
     pub vin_number: String,
+    pub identifier_part_2: String,
+    pub identifier_part_3: String,
+    pub identifier_part_4: String,
 }
 
 impl VehicleIdBroadcast {
     pub fn new(vin: String) -> Self {
-        Self { vin_number: vin }
+        Self {
+            vin_number: vin,
+            identifier_part_2: String::new(),
+            identifier_part_3: String::new(),
+            identifier_part_4: String::new(),
+        }
+    }
+
+    pub fn with_samples(vin: String, samples: &ProtocolSampleData) -> Self {
+        Self {
+            vin_number: vin,
+            identifier_part_2: samples.identifier_part_2.clone(),
+            identifier_part_3: samples.identifier_part_3.clone(),
+            identifier_part_4: samples.identifier_part_4.clone(),
+        }
+    }
+
+    pub fn serialize_revision(&self, revision: MidRevision) -> Vec<u8> {
+        if revision == 1 {
+            return FieldBuilder::new()
+                .add_str(None, &self.vin_number, 25)
+                .build();
+        }
+
+        FieldBuilder::new()
+            .add_str(Some(1), &self.vin_number, 25)
+            .add_str(Some(2), &self.identifier_part_2, 25)
+            .add_str(Some(3), &self.identifier_part_3, 25)
+            .add_str(Some(4), &self.identifier_part_4, 25)
+            .build()
     }
 }
 
 impl ResponseData for VehicleIdBroadcast {
     fn serialize(&self) -> Vec<u8> {
-        // Revision 1: VIN number only (no parameter ID)
-        // 25 bytes, left-padded with spaces if shorter, truncated if longer
-        let vin = if self.vin_number.len() >= 25 {
-            self.vin_number[..25].to_string()
-        } else {
-            format!("{:<25}", self.vin_number)
-        };
-
-        FieldBuilder::new().add_str(None, &vin, 25).build()
+        self.serialize_revision(1)
     }
 }
 
@@ -68,5 +93,18 @@ mod tests {
         let data = broadcast.serialize();
         assert_eq!(data.len(), 25);
         assert_eq!(&data[..], b"                         ");
+    }
+
+    #[test]
+    fn revision_two_contains_four_identifier_parts() {
+        let samples = ProtocolSampleData::default();
+        let broadcast = VehicleIdBroadcast::with_samples("VIN123".to_string(), &samples);
+        let data = broadcast.serialize_revision(2);
+        assert_eq!(data.len(), 108);
+        let text = String::from_utf8(data).unwrap();
+        assert!(text.starts_with("01VIN123"));
+        assert!(text.contains("02WORKORDER-0001"));
+        assert!(text.contains("03MODEL-SIMULATOR"));
+        assert!(text.contains("04BODY-00000001"));
     }
 }

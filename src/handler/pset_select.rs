@@ -34,11 +34,11 @@ impl MidHandler for PsetSelectHandler {
         let pset_id = String::from_utf8_lossy(&message.data)
             .parse::<u32>()
             .unwrap_or(0);
-        if self.state.read().is_job_mode() {
+        if self.state.read().operation_mode() == crate::tightening_tracker::OperationMode::Job {
             return Ok(Response::from_data(
                 4,
                 message.revision,
-                ErrorResponse::new(message.mid, ErrorCode::InvalidData),
+                ErrorResponse::new(message.mid, ErrorCode::PsetCannotBeSet),
             ));
         }
         let Some(pset) = self.psets.read().unwrap().get_by_id(pset_id) else {

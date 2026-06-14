@@ -5,6 +5,7 @@
 
 use crate::handler::data::CommunicationStartAck;
 use crate::handler::{HandlerError, MidHandler};
+use crate::protocol::revision::ProtocolConfiguration;
 use crate::protocol::{Message, Response};
 use crate::state::DeviceState;
 use std::sync::{Arc, RwLock};
@@ -13,11 +14,18 @@ use std::sync::{Arc, RwLock};
 /// Responds with MID 0002 (Communication start acknowledge)
 pub struct CommunicationStartHandler {
     state: Arc<RwLock<DeviceState>>,
+    protocol_configuration: ProtocolConfiguration,
 }
 
 impl CommunicationStartHandler {
-    pub fn new(state: Arc<RwLock<DeviceState>>) -> Self {
-        Self { state }
+    pub fn new(
+        state: Arc<RwLock<DeviceState>>,
+        protocol_configuration: ProtocolConfiguration,
+    ) -> Self {
+        Self {
+            state,
+            protocol_configuration,
+        }
     }
 }
 
@@ -33,10 +41,15 @@ impl MidHandler for CommunicationStartHandler {
                 state.channel_id,
                 state.controller_name.clone(),
                 Some(state.supplier_code.clone()),
+                self.protocol_configuration.samples(),
             )
         };
 
         // Respond with MID 0002 (Communication start acknowledge)
-        Ok(Response::from_data(2, message.revision, ack_data))
+        Ok(Response::new(
+            2,
+            message.revision,
+            ack_data.serialize_revision(message.revision),
+        ))
     }
 }

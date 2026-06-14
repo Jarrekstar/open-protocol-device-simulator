@@ -13,33 +13,35 @@ pub struct ErrorResponse {
     pub error_code: ErrorCode,
 }
 
-/// Common Open Protocol error codes
+/// Open Protocol error codes (R2.8.0 Table 18)
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 pub enum ErrorCode {
     /// Invalid data
     InvalidData = 1,
-    /// Controller not ready
-    ControllerNotReady = 2,
-    /// Client already connected
-    ClientAlreadyConnected = 3,
-    /// Parameter set not found
-    ParameterSetNotFound = 5,
-    /// Job not found
+    /// Parameter set ID not present
+    ParameterSetNotFound = 2,
+    /// Parameter set can not be set
+    PsetCannotBeSet = 3,
+    /// Parameter set not running
+    ParameterSetNotRunning = 4,
+    /// VIN input source not granted
+    VehicleIdNotGranted = 8,
+    /// Job ID not present
     JobNotFound = 17,
-    /// Vehicle ID input source not granted
-    VehicleIdNotGranted = 7,
-    /// Subscription already exists
+    /// Job info subscription already exists
     SubscriptionAlreadyExists = 18,
-    /// Subscription does not exist
+    /// Job info subscription does not exist
     SubscriptionDoesNotExist = 19,
-    /// Requested Job cannot be selected
+    /// Job can not be set
     JobCannotBeSet = 20,
-    /// Requested Job is not the active Job
+    /// Job not running
     JobNotRunning = 21,
-    /// MID revision not supported
+    /// Reject connection, client already connected
+    ClientAlreadyConnected = 96,
+    /// MID revision unsupported
     MidRevisionUnsupported = 97,
-    /// Generic error
+    /// Unknown MID
     GenericError = 99,
 }
 
@@ -103,7 +105,7 @@ mod tests {
 
         // Should contain MID (4 chars) + error code (2 chars) = 6 bytes
         assert_eq!(data.len(), 6);
-        assert_eq!(&data[..], b"001805");
+        assert_eq!(&data[..], b"001802");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use crate::handler::data::TighteningResult;
 use crate::job::JobRuntimeState;
 use crate::multi_spindle::{MultiSpindleResult, MultiSpindleStatus};
+use crate::tightening_tracker::OperationMode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
@@ -23,6 +24,11 @@ pub enum SimulatorEvent {
     /// Tool state changed (enabled/disabled)
     ToolStateChanged {
         enabled: bool,
+    },
+
+    /// Operation mode (command profile) changed
+    OperationModeChanged {
+        mode: OperationMode,
     },
 
     /// Batch was completed
@@ -71,6 +77,10 @@ pub enum SimulatorEvent {
         state: JobRuntimeState,
     },
     JobCompleted {
+        state: JobRuntimeState,
+        repeated: bool,
+    },
+    JobAborted {
         state: JobRuntimeState,
     },
 }

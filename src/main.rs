@@ -11,6 +11,7 @@ use config::Settings;
 use events::SimulatorEvent;
 use failure_simulator::FailureSimulator;
 use observable_state::ObservableState;
+use protocol::revision::ProtocolConfiguration;
 use state::DeviceState;
 
 /// Send a message with failure injection
@@ -125,27 +126,35 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
             eprintln!("Failed to initialize SQLite Job repository: {error}");
             open_protocol_device_simulator::job::create_default_repository()
         });
+    let protocol_configuration =
+        ProtocolConfiguration::persistent(db_path).unwrap_or_else(|error| {
+            eprintln!("Failed to initialize protocol profile storage: {error}");
+            ProtocolConfiguration::default()
+        });
 
     // Spawn HTTP server for state inspection and event generation
     let http_observable = observable_state.clone();
     let http_settings = settings.clone();
     let http_psets = pset_repository.clone();
     let http_jobs = job_repository.clone();
+    let http_protocol_configuration = protocol_configuration.clone();
     tokio::spawn(async move {
-        http_server::start_http_server_with_repositories(
+        http_server::start_http_server_with_repositories_and_protocol(
             http_observable,
             http_settings,
             http_psets,
             http_jobs,
+            http_protocol_configuration,
         )
         .await;
     });
 
     // Create handler registry (shared across all connections)
-    let registry = Arc::new(handler::create_registry_with_repositories(
+    let registry = Arc::new(handler::create_registry_with_repositories_and_protocol(
         observable_state.clone(),
-        pset_repository,
+        pset_repository.clone(),
         job_repository,
+        protocol_configuration.clone(),
     ));
 
     loop {
@@ -154,6 +163,8 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
 
         let registry = Arc::clone(&registry);
         let conn_observable_state = observable_state.clone();
+        let conn_protocol_configuration = protocol_configuration.clone();
+        let conn_pset_repository = pset_repository.clone();
         let mut event_rx = event_tx.subscribe();
         tokio::spawn(async move {
             let codec = codec::null_delimited_codec::NullDelimitedCodec::new();
@@ -185,7 +196,10 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                         match registry.dispatch(&message, session.subscriptions_mut()) {
                                             Ok(handler::HandlerResult::Response(response)) => {
                                                 if response.mid != 4 {
-                                                    session.apply_subscription_message(message.mid);
+                                                    session.apply_subscription_message(
+                                                        message.mid,
+                                                        message.revision,
+                                                    );
                                                 }
                                                 // Serialize and send response
                                                 let response_bytes = protocol::serializer::serialize_response(&response);
@@ -219,8 +233,20 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                                         .vehicle_id
                                                         .clone()
                                                         .unwrap_or_default();
-                                                    let vin_data = handler::data::VehicleIdBroadcast::new(current_vin.clone());
-                                                    let vin_response = protocol::Response::from_data(52, 1, vin_data);
+                                                    let revision = session
+                                                        .subscriptions()
+                                                        .vehicle_id_revision()
+                                                        .unwrap_or(1);
+                                                    let vin_data =
+                                                        handler::data::VehicleIdBroadcast::with_samples(
+                                                            current_vin.clone(),
+                                                            &conn_protocol_configuration.samples(),
+                                                        );
+                                                    let vin_response = protocol::Response::new(
+                                                        52,
+                                                        revision,
+                                                        vin_data.serialize_revision(revision),
+                                                    );
                                                     let vin_response_bytes = protocol::serializer::serialize_response(&vin_response);
                                                     println!("Sending initial MID 0052 with current VIN: {}", current_vin);
 
@@ -236,6 +262,57 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                                             break;
                                                         }
                                                         Ok(true) => {}
+                                                    }
+                                                }
+                                                if message.mid == 14 {
+                                                    let revision = session
+                                                        .subscriptions()
+                                                        .pset_selection_revision()
+                                                        .unwrap_or(1);
+                                                    let (pset_id, batch_size) = {
+                                                        let state = conn_observable_state.read();
+                                                        (
+                                                            state.current_pset_id.unwrap_or(0),
+                                                            state.tightening_tracker.batch_size(),
+                                                        )
+                                                    };
+                                                    let pset = {
+                                                        conn_pset_repository
+                                                            .read()
+                                                            .unwrap()
+                                                            .get_by_id(pset_id)
+                                                    };
+                                                    if let Some(pset) = pset {
+                                                        let pset_data =
+                                                            handler::data::PsetSelected::from_pset(
+                                                                &pset,
+                                                                batch_size,
+                                                            );
+                                                        let pset_response =
+                                                            protocol::Response::new(
+                                                                15,
+                                                                revision,
+                                                                pset_data
+                                                                    .serialize_revision(revision),
+                                                            );
+                                                        let response_bytes =
+                                                            protocol::serializer::serialize_response(
+                                                                &pset_response,
+                                                            );
+                                                        if let Err(error) =
+                                                            send_with_failure_injection(
+                                                                &mut framed,
+                                                                response_bytes,
+                                                                &conn_observable_state,
+                                                                "MID 0015 initial PSET",
+                                                            )
+                                                            .await
+                                                        {
+                                                            eprintln!(
+                                                                "send error during initial PSET broadcast: {error}"
+                                                            );
+                                                            break;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -282,9 +359,18 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                     Ok(event) = event_rx.recv() => {
                         match event {
                             SimulatorEvent::TighteningCompleted { result } => {
-                                if session.subscriptions().is_subscribed_to_tightening_result() {
+                                if let Some(revision) =
+                                    session.subscriptions().tightening_result_revision()
+                                {
                                     println!("Broadcasting MID 0061 to subscribed client ({})", session.addr());
-                                    let response = protocol::Response::from_data(61, 1, result);
+                                    let response = protocol::Response::new(
+                                        61,
+                                        revision,
+                                        result.serialize_revision(
+                                            revision,
+                                            &conn_protocol_configuration.samples(),
+                                        ),
+                                    );
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
                                     match send_with_failure_injection(
@@ -303,10 +389,31 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                 }
                             }
                             SimulatorEvent::PsetChanged { pset_id, pset_name: _ } => {
-                                if session.subscriptions().is_subscribed_to_pset_selection() {
+                                if let Some(revision) =
+                                    session.subscriptions().pset_selection_revision()
+                                {
                                     println!("Broadcasting MID 0015 to subscribed client ({}): pset {}", session.addr(), pset_id);
-                                    let pset_data = handler::data::PsetSelected::new(pset_id);
-                                    let response = protocol::Response::from_data(15, 1, pset_data);
+                                    let batch_size = conn_observable_state
+                                        .read()
+                                        .tightening_tracker
+                                        .batch_size();
+                                    let pset = {
+                                        conn_pset_repository
+                                            .read()
+                                            .unwrap()
+                                            .get_by_id(pset_id)
+                                    };
+                                    let Some(pset) = pset else {
+                                        eprintln!("Cannot broadcast MID 0015: PSET {pset_id} not found");
+                                        continue;
+                                    };
+                                    let pset_data =
+                                        handler::data::PsetSelected::from_pset(&pset, batch_size);
+                                    let response = protocol::Response::new(
+                                        15,
+                                        revision,
+                                        pset_data.serialize_revision(revision),
+                                    );
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
                                     match send_with_failure_injection(
@@ -324,19 +431,31 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                     }
                                 }
                             }
-                            SimulatorEvent::ToolStateChanged { enabled } => {
-                                println!("Tool state changed: {}", if enabled { "enabled" } else { "disabled" });
+                            SimulatorEvent::ToolStateChanged { .. } => {
                                 // No standard MID for tool state broadcasts in Open Protocol
+                            }
+                            SimulatorEvent::OperationModeChanged { .. } => {
+                                // Simulator profile change; only relevant to the web UI
                             }
                             SimulatorEvent::BatchCompleted { total } => {
                                 println!("Batch completed: {} tightenings", total);
                                 // Could send MID 0061 with batch status if subscribed
                             }
                             SimulatorEvent::VehicleIdChanged { vin } => {
-                                if session.subscriptions().is_subscribed_to_vehicle_id() {
+                                if let Some(revision) =
+                                    session.subscriptions().vehicle_id_revision()
+                                {
                                     println!("Broadcasting MID 0052 to subscribed client ({}): VIN {}", session.addr(), vin);
-                                    let vin_data = handler::data::VehicleIdBroadcast::new(vin);
-                                    let response = protocol::Response::from_data(52, 1, vin_data);
+                                    let vin_data =
+                                        handler::data::VehicleIdBroadcast::with_samples(
+                                            vin,
+                                            &conn_protocol_configuration.samples(),
+                                        );
+                                    let response = protocol::Response::new(
+                                        52,
+                                        revision,
+                                        vin_data.serialize_revision(revision),
+                                    );
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
                                     match send_with_failure_injection(
@@ -355,11 +474,13 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                 }
                             }
                             SimulatorEvent::MultiSpindleStatusCompleted { status } => {
-                                if session.subscriptions().is_subscribed_to_multi_spindle_status() {
+                                if let Some(revision) =
+                                    session.subscriptions().multi_spindle_status_revision()
+                                {
                                     println!("Broadcasting MID 0091 to subscribed client ({}): sync_id {}, status {}",
                                         session.addr(), status.sync_id, status.status);
                                     let status_data = handler::data::MultiSpindleStatusBroadcast::new(status);
-                                    let response = protocol::Response::from_data(91, 1, status_data);
+                                    let response = protocol::Response::from_data(91, revision, status_data);
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
                                     match send_with_failure_injection(
@@ -385,7 +506,9 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                 batch_counter,
                                 batch_status,
                             } => {
-                                if session.subscriptions().is_subscribed_to_multi_spindle_result() {
+                                if let Some(revision) =
+                                    session.subscriptions().multi_spindle_result_revision()
+                                {
                                     println!("Broadcasting MID 0101 to subscribed client ({}): result_id {}, sync_id {}, status {}",
                                         session.addr(), result.result_id, result.sync_id,
                                         if result.is_ok() { "OK" } else { "NOK" });
@@ -404,7 +527,14 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                         batch_counter,
                                         batch_status,
                                     );
-                                    let response = protocol::Response::from_data(101, 1, result_data);
+                                    let response = protocol::Response::new(
+                                        101,
+                                        revision,
+                                        result_data.serialize_revision(
+                                            revision,
+                                            &conn_protocol_configuration.samples(),
+                                        ),
+                                    );
                                     let response_bytes = protocol::serializer::serialize_response(&response);
 
                                     match send_with_failure_injection(
@@ -433,7 +563,10 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                     && let Some(codec) =
                                         open_protocol_device_simulator::job_codec::codec_for_revision(revision)
                                 {
-                                    match codec.serialize_job_info(&state) {
+                                    match codec.serialize_job_info(
+                                        &state,
+                                        &conn_protocol_configuration.samples(),
+                                    ) {
                                         Ok(data) => {
                                             let response = protocol::Response::new(35, revision, data);
                                             let response_bytes =
@@ -457,8 +590,10 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
                                 }
                             }
                             SimulatorEvent::JobStepChanged { .. }
-                            | SimulatorEvent::JobCompleted { .. } => {
-                                // Frontend-specific typed events. MID 0035 is emitted by JobProgress.
+                            | SimulatorEvent::JobCompleted { .. }
+                            | SimulatorEvent::JobAborted { .. } => {
+                                // Frontend-specific typed events. MID 0035 is emitted by JobProgress;
+                                // Abort Job is answered to the TCP client by its MID 0005 ACK.
                             }
                         }
                     }

@@ -1,3 +1,4 @@
+use crate::protocol::revision::MidRevision;
 use crate::subscriptions::Subscriptions;
 use std::net::SocketAddr;
 use std::time::Instant;
@@ -142,17 +143,32 @@ impl ConnectionSession<Ready> {
         &mut self.state.subscriptions
     }
 
-    pub fn apply_subscription_message(&mut self, mid: u16) {
+    pub fn apply_subscription_message(&mut self, mid: u16, revision: MidRevision) {
         match mid {
-            60 => self.subscribe_tightening_result(),
+            60 => self
+                .state
+                .subscriptions
+                .subscribe_tightening_result_revision(revision),
             63 => self.unsubscribe_tightening_result(),
-            14 => self.subscribe_pset_selection(),
+            14 => self
+                .state
+                .subscriptions
+                .subscribe_pset_selection_revision(revision),
             17 => self.unsubscribe_pset_selection(),
-            51 => self.subscribe_vehicle_id(),
+            51 => self
+                .state
+                .subscriptions
+                .subscribe_vehicle_id_revision(revision),
             54 => self.unsubscribe_vehicle_id(),
-            90 => self.subscribe_multi_spindle_status(),
+            90 => self
+                .state
+                .subscriptions
+                .subscribe_multi_spindle_status_revision(revision),
             92 => self.unsubscribe_multi_spindle_status(),
-            100 => self.subscribe_multi_spindle_result(),
+            100 => self
+                .state
+                .subscriptions
+                .subscribe_multi_spindle_result_revision(revision),
             103 => self.unsubscribe_multi_spindle_result(),
             _ => {}
         }

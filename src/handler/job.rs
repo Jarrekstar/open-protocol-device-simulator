@@ -239,13 +239,19 @@ impl MidHandler for JobSelectHandler {
         if self.state.read().is_job_running() {
             return Ok(error(message, ErrorCode::JobCannotBeSet));
         }
-        let pset_name = self
+        let Some(first_step) = job.steps.first() else {
+            return Ok(error(message, ErrorCode::JobCannotBeSet));
+        };
+        let Some(pset_name) = self
             .psets
             .read()
             .unwrap()
-            .get_by_id(job.steps[0].pset_id)
-            .map(|pset| pset.name);
-        if self.state.select_job(job, pset_name).is_err() {
+            .get_by_id(first_step.pset_id)
+            .map(|pset| pset.name)
+        else {
+            return Ok(error(message, ErrorCode::JobCannotBeSet));
+        };
+        if self.state.select_job(job, Some(pset_name)).is_err() {
             return Ok(error(message, ErrorCode::JobCannotBeSet));
         }
         Ok(HandlerResult::Response(Response::from_data(
@@ -353,17 +359,28 @@ mod tests {
         }
     }
 
-    fn registry() -> crate::handler::HandlerRegistry {
+    fn registry_with_state() -> (
+        crate::handler::HandlerRegistry,
+        Arc<std::sync::RwLock<DeviceState>>,
+    ) {
         let state = DeviceState::new_shared();
+        state.write().unwrap().set_job_mode();
         let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(16);
-        let observable = ObservableState::new(state, broadcaster);
+        let observable = ObservableState::new(Arc::clone(&state), broadcaster);
         let psets = crate::pset::create_default_repository();
         let jobs = crate::job::create_default_repository();
         jobs.write().unwrap().create(example_job()).unwrap();
-        create_registry_with_repositories(observable, psets, jobs)
+        (
+            create_registry_with_repositories(observable, psets, jobs),
+            state,
+        )
     }
 
-    fn message(mid: u16, revision: u8, data: &[u8]) -> Message {
+    fn registry() -> crate::handler::HandlerRegistry {
+        registry_with_state().0
+    }
+
+    fn message(mid: u16, revision: u16, data: &[u8]) -> Message {
         Message {
             length: (20 + data.len()) as u32,
             mid,
@@ -427,7 +444,7 @@ mod tests {
 
     #[test]
     fn returns_job_errors_and_revision_errors() {
-        let registry = registry();
+        let (registry, state) = registry_with_state();
         let mut subscriptions = Subscriptions::new();
         let HandlerResult::Response(missing) = registry
             .dispatch(&message(38, 1, b"99"), &mut subscriptions)
@@ -436,6 +453,8 @@ mod tests {
             panic!("Missing Job must respond");
         };
         assert_eq!(missing.data, b"003817");
+        assert!(!state.read().unwrap().is_job_mode());
+        assert_eq!(state.read().unwrap().current_job_id, None);
 
         let HandlerResult::Response(revision) = registry
             .dispatch(&message(30, 2, b""), &mut subscriptions)
@@ -444,6 +463,30 @@ mod tests {
             panic!("Unsupported revision must respond");
         };
         assert_eq!(revision.data, b"003097");
+    }
+
+    #[test]
+    fn malformed_persisted_job_cannot_be_selected() {
+        let state = DeviceState::new_shared();
+        state.write().unwrap().set_job_mode();
+        let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(16);
+        let observable = ObservableState::new(Arc::clone(&state), broadcaster);
+        let psets = crate::pset::create_default_repository();
+        let jobs = crate::job::create_default_repository();
+        let mut malformed = example_job();
+        malformed.steps.clear();
+        jobs.write().unwrap().create(malformed).unwrap();
+        let registry = create_registry_with_repositories(observable, psets, jobs);
+        let mut subscriptions = Subscriptions::new();
+
+        let HandlerResult::Response(response) = registry
+            .dispatch(&message(38, 1, b"07"), &mut subscriptions)
+            .unwrap()
+        else {
+            panic!("Malformed Job selection must respond");
+        };
+        assert_eq!(response.data, b"003820");
+        assert!(!state.read().unwrap().is_job_mode());
     }
 
     #[test]

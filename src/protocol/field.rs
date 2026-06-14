@@ -27,6 +27,15 @@ impl Field {
         }
     }
 
+    /// Create a field from an unsigned integer value.
+    pub fn from_uint(id: Option<u8>, value: u64, width: usize) -> Self {
+        let id = id.map(|v| format!("{:02}", v));
+        Self {
+            id,
+            value: format!("{:0width$}", value, width = width),
+        }
+    }
+
     /// Create a field from a string value with fixed width (space-padded)
     pub fn from_str(id: Option<u8>, value: impl AsRef<str>, width: usize) -> Self {
         let s = value.as_ref();
@@ -74,6 +83,10 @@ impl FieldBuilder {
         self.add_field(Field::from_int(id, value, width))
     }
 
+    pub fn add_uint(self, id: Option<u8>, value: u64, width: usize) -> Self {
+        self.add_field(Field::from_uint(id, value, width))
+    }
+
     pub fn add_str(self, id: Option<u8>, value: impl AsRef<str>, width: usize) -> Self {
         self.add_field(Field::from_str(id, value, width))
     }
@@ -111,6 +124,12 @@ mod tests {
         let field = Field::from_int(Some(2), 123, 5);
         let serialized = field.serialize();
         assert_eq!(serialized, b"0200123");
+    }
+
+    #[test]
+    fn test_unsigned_field_supports_protocol_u32_range() {
+        let field = Field::from_uint(Some(2), u32::MAX as u64, 10);
+        assert_eq!(field.serialize(), b"024294967295");
     }
 
     #[test]

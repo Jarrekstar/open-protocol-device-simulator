@@ -32,11 +32,13 @@ pub struct Job {
 
 impl Job {
     pub fn validate(&self, configured_channels: &[u32], pset_ids: &[u32]) -> Result<(), String> {
-        if self.id > 99 {
-            return Err("Job ID must be in the range 00-99".to_string());
+        if self.id > 9_999 {
+            return Err("Job ID must be in the range 0000-9999".to_string());
         }
-        if self.name.len() > 25 || !self.name.is_ascii() {
-            return Err("Job name must be ASCII and no longer than 25 bytes".to_string());
+        if self.name.len() > 25 || !self.name.bytes().all(|byte| (b' '..=b'~').contains(&byte)) {
+            return Err(
+                "Job name must use printable ASCII and be no longer than 25 bytes".to_string(),
+            );
         }
         if self.name.trim().is_empty() {
             return Err("Job name is required".to_string());
@@ -185,7 +187,7 @@ impl SqliteJobRepository {
         connection
             .execute_batch(
                 "CREATE TABLE IF NOT EXISTS jobs (
-                    id INTEGER PRIMARY KEY CHECK (id BETWEEN 0 AND 99),
+                    id INTEGER PRIMARY KEY CHECK (id BETWEEN 0 AND 9999),
                     name TEXT NOT NULL,
                     forced_order INTEGER NOT NULL,
                     first_tightening_timeout INTEGER NOT NULL,
@@ -212,7 +214,62 @@ impl SqliteJobRepository {
                 );
                 CREATE INDEX IF NOT EXISTS idx_job_steps_pset_id ON job_steps(pset_id);",
             )
-            .map_err(|error| format!("Failed to initialize Job schema: {error}"))
+            .map_err(|error| format!("Failed to initialize Job schema: {error}"))?;
+
+        let jobs_schema = connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'jobs'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| format!("Failed to inspect Job schema: {error}"))?
+            .unwrap_or_default();
+        if jobs_schema.contains("BETWEEN 0 AND 99)") && !jobs_schema.contains("BETWEEN 0 AND 9999)")
+        {
+            connection
+                .execute_batch(
+                    "PRAGMA foreign_keys = OFF;
+                     BEGIN IMMEDIATE;
+                     ALTER TABLE job_steps RENAME TO job_steps_legacy;
+                     ALTER TABLE jobs RENAME TO jobs_legacy;
+                     CREATE TABLE jobs (
+                        id INTEGER PRIMARY KEY CHECK (id BETWEEN 0 AND 9999),
+                        name TEXT NOT NULL,
+                        forced_order INTEGER NOT NULL,
+                        first_tightening_timeout INTEGER NOT NULL,
+                        job_timeout INTEGER NOT NULL,
+                        batch_count_mode INTEGER NOT NULL,
+                        lock_at_job_done INTEGER NOT NULL,
+                        use_line_control INTEGER NOT NULL,
+                        repeat_job INTEGER NOT NULL,
+                        loosening_mode INTEGER NOT NULL,
+                        repair_mode INTEGER NOT NULL,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                     );
+                     CREATE TABLE job_steps (
+                        job_id INTEGER NOT NULL,
+                        step_order INTEGER NOT NULL,
+                        channel_id INTEGER NOT NULL,
+                        pset_id INTEGER NOT NULL,
+                        auto_value INTEGER NOT NULL,
+                        batch_size INTEGER NOT NULL,
+                        PRIMARY KEY (job_id, step_order),
+                        FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+                        FOREIGN KEY (pset_id) REFERENCES psets(id) ON DELETE RESTRICT
+                     );
+                     INSERT INTO jobs SELECT * FROM jobs_legacy;
+                     INSERT INTO job_steps SELECT * FROM job_steps_legacy;
+                     DROP TABLE job_steps_legacy;
+                     DROP TABLE jobs_legacy;
+                     CREATE INDEX idx_job_steps_pset_id ON job_steps(pset_id);
+                     COMMIT;
+                     PRAGMA foreign_keys = ON;",
+                )
+                .map_err(|error| format!("Failed to migrate Job ID width: {error}"))?;
+        }
+        Ok(())
     }
 
     fn row_to_job(row: &rusqlite::Row<'_>) -> SqliteResult<Job> {
@@ -474,9 +531,9 @@ pub enum JobStatus {
 impl JobStatus {
     pub fn protocol_value(self) -> u8 {
         match self {
-            Self::Running => 2,
+            Self::Running => 0,
             Self::Ok => 1,
-            Self::Nok => 0,
+            Self::Nok => 2,
         }
     }
 }
@@ -696,6 +753,8 @@ mod tests {
         assert!(example_job().validate(&[1], &[1, 2]).is_ok());
         let mut invalid = example_job();
         invalid.name = "non-ascii-\u{e1}".to_string();
+        assert!(invalid.validate(&[1], &[1, 2]).is_err());
+        invalid.name = "line\nbreak".to_string();
         assert!(invalid.validate(&[1], &[1, 2]).is_err());
     }
 

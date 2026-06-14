@@ -21,4 +21,9 @@ pub mod tightening_tracker;
 // Re-export commonly used types
 pub use events::SimulatorEvent;
 pub use observable_state::ObservableState;
+pub use protocol::revision::{
+    MidFamilyDefinition, MidRevision, ProtocolConfiguration, ProtocolProfile, RevisionPolicy,
+    RevisionSelection,
+};
 pub use state::DeviceState;
+pub use tightening_tracker::OperationMode;

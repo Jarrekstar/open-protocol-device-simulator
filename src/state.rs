@@ -4,13 +4,17 @@ use crate::device_fsm::DeviceFSMState;
 use crate::failure_simulator::FailureConfig;
 use crate::job::{Job, JobProgress, JobRuntimeState, JobStatus};
 use crate::multi_spindle::MultiSpindleConfig;
-use crate::tightening_tracker::TighteningTracker;
+use crate::tightening_tracker::{OperationMode, TighteningTracker};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// Represents the internal state of the simulated device
 #[derive(Debug, Clone, Serialize)]
 pub struct DeviceState {
+    // Command profile selected by the simulator operator.
+    pub operation_mode: OperationMode,
+
     // Controller identification
     pub cell_id: u32,
     pub channel_id: u32,
@@ -23,6 +27,11 @@ pub struct DeviceState {
 
     // Tightening tracking (single mode or batch mode)
     pub tightening_tracker: TighteningTracker,
+
+    // Runtime batch sizes configured per PSET via MID 0019. The tracker only
+    // counts the selected PSET; sizes for other PSETs are applied on selection.
+    #[serde(skip)]
+    pset_batch_sizes: HashMap<u32, u32>,
 
     // Device operational state
     pub device_fsm_state: DeviceFSMState,
@@ -53,6 +62,7 @@ impl DeviceState {
     /// Create a new device state with default values
     pub fn new() -> Self {
         Self {
+            operation_mode: OperationMode::Pset,
             cell_id: 1,
             channel_id: 1,
             controller_name: "OpenProtocolSimulator".to_string(),
@@ -60,10 +70,11 @@ impl DeviceState {
             current_pset_id: Some(1),
             current_pset_name: Some("Default".to_string()),
             tightening_tracker: TighteningTracker::new(),
+            pset_batch_sizes: HashMap::new(),
             device_fsm_state: DeviceFSMState::idle(),
             tool_enabled: true,
             vehicle_id: None,
-            current_job_id: Some(1),
+            current_job_id: None,
             current_job_name: None,
             current_job_status: None,
             current_job_step: None,
@@ -80,6 +91,7 @@ impl DeviceState {
     /// Create a new device state from configuration
     pub fn new_from_config(config: &DeviceConfig) -> Self {
         Self {
+            operation_mode: OperationMode::Pset,
             cell_id: config.cell_id,
             channel_id: config.channel_id,
             controller_name: config.controller_name.clone(),
@@ -87,10 +99,11 @@ impl DeviceState {
             current_pset_id: Some(1),
             current_pset_name: Some("Default".to_string()),
             tightening_tracker: TighteningTracker::new(),
+            pset_batch_sizes: HashMap::new(),
             device_fsm_state: DeviceFSMState::idle(),
             tool_enabled: true,
             vehicle_id: None,
-            current_job_id: Some(1),
+            current_job_id: None,
             current_job_name: None,
             current_job_status: None,
             current_job_step: None,
@@ -115,9 +128,22 @@ impl DeviceState {
     }
 
     /// Set the parameter set
+    ///
+    /// Outside of Job execution, selecting a PSET activates its configured
+    /// batch size (MID 0019); a batch-profile PSET without one waits for it.
     pub fn set_pset(&mut self, pset_id: u32, pset_name: Option<String>) {
+        let changed = self.current_pset_id != Some(pset_id);
         self.current_pset_id = Some(pset_id);
         self.current_pset_name = pset_name;
+        if !changed || self.tightening_tracker.is_job_mode() {
+            return;
+        }
+        if let Some(&size) = self.pset_batch_sizes.get(&pset_id) {
+            self.operation_mode = OperationMode::Batch;
+            self.tightening_tracker.enable_batch(size);
+        } else if self.operation_mode == OperationMode::Batch {
+            self.tightening_tracker.enter_batch_mode();
+        }
     }
 
     pub fn select_job(&mut self, job: Job, pset_name: Option<String>) -> Result<(), String> {
@@ -130,6 +156,7 @@ impl DeviceState {
             .ok_or_else(|| "A Job must contain at least one step".to_string())?
             .pset_id;
         self.tightening_tracker.start_job(job);
+        self.operation_mode = OperationMode::Job;
         self.set_pset(first_pset_id, pset_name);
         self.tool_enabled = true;
         self.refresh_job_fields();
@@ -157,6 +184,40 @@ impl DeviceState {
             return Err("Cannot clear JobMode while a Job is running".to_string());
         }
         self.tightening_tracker.exit_job();
+        self.operation_mode = OperationMode::Pset;
+        self.clear_job_fields();
+        Ok(())
+    }
+
+    /// Abort the currently running Job (MID 0127).
+    ///
+    /// Unlike [`clear_job_mode`](Self::clear_job_mode), which refuses while a
+    /// Job is running, this force-stops the execution: the tracker leaves Job
+    /// mode, runtime fields are cleared, and the controller falls back to the
+    /// Pset profile. Returns the aborted Job's runtime snapshot when a Job was
+    /// loaded, or `None` when nothing was running.
+    pub fn abort_job(&mut self) -> Option<JobRuntimeState> {
+        let runtime = self.tightening_tracker.job_runtime_state()?;
+        self.tightening_tracker.exit_job();
+        self.operation_mode = OperationMode::Pset;
+        self.clear_job_fields();
+        Some(runtime)
+    }
+
+    pub fn finish_completed_job(&mut self) -> bool {
+        let completed = self
+            .tightening_tracker
+            .job_execution()
+            .is_some_and(|execution| !execution.is_running());
+        if !completed {
+            return false;
+        }
+        self.tightening_tracker.exit_job();
+        self.clear_job_fields();
+        true
+    }
+
+    fn clear_job_fields(&mut self) {
         self.current_job_id = None;
         self.current_job_name = None;
         self.current_job_status = None;
@@ -166,7 +227,6 @@ impl DeviceState {
         self.current_job_total_progress = 0;
         self.current_job_total_steps = 0;
         self.current_job_total_batch_size = 0;
-        Ok(())
     }
 
     pub fn is_job_mode(&self) -> bool {
@@ -175,6 +235,10 @@ impl DeviceState {
 
     pub fn is_job_running(&self) -> bool {
         self.tightening_tracker.is_job_running()
+    }
+
+    pub fn operation_mode(&self) -> OperationMode {
+        self.operation_mode
     }
 
     pub fn job_runtime_state(&self) -> Option<JobRuntimeState> {
@@ -221,9 +285,60 @@ impl DeviceState {
         self.current_job_total_batch_size = runtime.total_batch_size;
     }
 
-    /// Set batch size (enables batch mode)
-    pub fn set_batch_size(&mut self, size: u32) {
+    pub fn set_pset_mode(&mut self) {
+        if self.operation_mode == OperationMode::Pset {
+            return;
+        }
+        self.operation_mode = OperationMode::Pset;
+        self.tightening_tracker.enable_single();
+        // The operator chose single tightenings: drop runtime batch config so
+        // re-selecting a PSET does not silently re-enter batch counting.
+        self.pset_batch_sizes.clear();
+        self.clear_job_fields();
+    }
+
+    pub fn set_batch_mode(&mut self) {
+        if self.operation_mode == OperationMode::Batch {
+            return;
+        }
+        self.operation_mode = OperationMode::Batch;
+        self.tightening_tracker.enter_batch_mode();
+        self.clear_job_fields();
+    }
+
+    pub fn set_job_mode(&mut self) {
+        if self.operation_mode == OperationMode::Job {
+            return;
+        }
+        self.operation_mode = OperationMode::Job;
+        self.tightening_tracker.enable_single();
+        self.clear_job_fields();
+    }
+
+    /// Set batch size for a specific PSET (MID 0019). The tracker only starts
+    /// counting when the target PSET is the selected one; otherwise the size
+    /// is stored and applied when that PSET gets selected.
+    /// Returns true when the batch was applied to the running tracker.
+    pub fn set_pset_batch_size(&mut self, pset_id: u32, size: u32) -> bool {
+        self.pset_batch_sizes.insert(pset_id, size);
+        if self.current_pset_id != Some(pset_id) {
+            return false;
+        }
+        self.operation_mode = OperationMode::Batch;
         self.tightening_tracker.enable_batch(size);
+        self.clear_job_fields();
+        true
+    }
+
+    /// Set batch size for the currently selected PSET (enables batch mode)
+    pub fn set_batch_size(&mut self, size: u32) {
+        if let Some(pset_id) = self.current_pset_id {
+            self.set_pset_batch_size(pset_id, size);
+        } else {
+            self.operation_mode = OperationMode::Batch;
+            self.tightening_tracker.enable_batch(size);
+            self.clear_job_fields();
+        }
     }
 
     /// Increment batch counter without tightening (MID 0128 - skip bolt)
@@ -383,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn job_completion_locks_tool_and_restart_resets_progress() {
+    fn job_completion_locks_tool_and_exits_mode() {
         let mut state = DeviceState::new();
         state
             .select_job(test_job(true), Some("Light Duty".to_string()))
@@ -391,13 +506,12 @@ mod tests {
         state.add_tightening(true);
         assert_eq!(state.current_job_status, Some(JobStatus::Ok));
         assert!(!state.tool_enabled);
-
-        state
-            .restart_job(7, Some("Light Duty".to_string()))
-            .unwrap();
-        assert_eq!(state.current_job_status, Some(JobStatus::Running));
-        assert_eq!(state.current_job_total_progress, 0);
-        assert!(state.tool_enabled);
+        assert!(state.finish_completed_job());
+        assert!(!state.is_job_mode());
+        assert_eq!(state.operation_mode(), OperationMode::Job);
+        assert_eq!(state.current_job_id, None);
+        assert_eq!(state.current_job_status, None);
+        assert!(!state.tool_enabled);
     }
 
     #[test]
@@ -410,5 +524,34 @@ mod tests {
         assert_eq!(counter, 1);
         assert!(progress.is_some());
         assert_eq!(state.current_job_status, Some(JobStatus::Ok));
+        assert!(state.finish_completed_job());
+        assert!(!state.is_job_mode());
+        assert_eq!(state.operation_mode(), OperationMode::Job);
+    }
+
+    #[test]
+    fn reapplying_batch_mode_preserves_batch_configuration() {
+        let mut state = DeviceState::new();
+        state.set_batch_mode();
+        state.set_batch_size(20);
+
+        state.set_batch_mode();
+
+        assert_eq!(state.operation_mode(), OperationMode::Batch);
+        assert_eq!(state.tightening_tracker.batch_size(), 20);
+    }
+
+    #[test]
+    fn reapplying_job_mode_preserves_running_job() {
+        let mut state = DeviceState::new();
+        state
+            .select_job(test_job(false), Some("Light Duty".to_string()))
+            .unwrap();
+
+        state.set_job_mode();
+
+        assert_eq!(state.operation_mode(), OperationMode::Job);
+        assert!(state.is_job_running());
+        assert_eq!(state.current_job_id, Some(7));
     }
 }

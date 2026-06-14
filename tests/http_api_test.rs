@@ -15,7 +15,7 @@ async fn test_device_state_initialization() {
     assert_eq!(state.controller_name, "OpenProtocolSimulator");
     assert!(state.tool_enabled);
     assert_eq!(state.current_pset_id, Some(1));
-    assert_eq!(state.current_job_id, Some(1));
+    assert_eq!(state.current_job_id, None);
 }
 
 /// Test multi-spindle configuration

@@ -6,8 +6,12 @@ use crate::handler::data::TighteningResult;
 use crate::job::{Job, SharedJobRepository};
 use crate::multi_spindle::{MultiSpindleStatus, generate_multi_spindle_results};
 use crate::observable_state::ObservableState;
+use crate::protocol::revision::{
+    MidFamilyDefinition, ProtocolConfiguration, ProtocolProfile, revision_catalog, validate_profile,
+};
 use crate::pset::{self, SharedPsetRepository};
 use crate::state::DeviceState;
+use crate::tightening_tracker::OperationMode;
 use axum::{
     Router,
     extract::{
@@ -33,6 +37,7 @@ pub struct ServerState {
     pub pset_repository: SharedPsetRepository,
     pub job_repository: SharedJobRepository,
     pub settings: Settings,
+    pub protocol_configuration: ProtocolConfiguration,
 }
 
 /// Get TighteningParams from selected PSET, or default if no PSET selected
@@ -117,6 +122,14 @@ struct OperationContext {
     batch_size: u32,
 }
 
+struct CompletionOutcome {
+    batch_counter: u32,
+    batch_completed: bool,
+    target_size: u32,
+    batch_status: u8,
+    job_finished: bool,
+}
+
 fn operation_context(state: &DeviceState) -> OperationContext {
     OperationContext {
         job_id: state.current_job_id.unwrap_or(1),
@@ -136,12 +149,13 @@ fn record_tightening_completion(
     torque_ok: bool,
     angle_ok: bool,
     broadcast_tightening_result: bool,
-) -> (u32, bool, u32) {
+) -> CompletionOutcome {
     let (
         result,
         batch_counter,
         batch_completed,
         target_size,
+        batch_status,
         job_progress,
         runtime,
         next_pset_id,
@@ -151,6 +165,12 @@ fn record_tightening_completion(
         let context = operation_context(&state);
         let tool_was_enabled = state.tool_enabled;
         let info = state.add_tightening(tightening_ok);
+        let batch_status = match info.batch_status {
+            crate::batch_manager::BatchStatus::CompletedOk => 1,
+            crate::batch_manager::BatchStatus::CompletedNok => 0,
+            crate::batch_manager::BatchStatus::NotFinished
+            | crate::batch_manager::BatchStatus::NotUsed => 2,
+        };
         let result = build_tightening_result(
             &state,
             context.job_id,
@@ -175,6 +195,7 @@ fn record_tightening_completion(
             info.counter,
             state.tightening_tracker.is_complete(),
             state.tightening_tracker.batch_size(),
+            batch_status,
             job_progress,
             runtime,
             next_pset_id,
@@ -186,6 +207,9 @@ fn record_tightening_completion(
         observable_state.broadcast(SimulatorEvent::TighteningCompleted { result });
     }
 
+    let job_finished = job_progress
+        .as_ref()
+        .is_some_and(|progress| progress.completed_status.is_some() && !progress.repeated);
     if let (Some(progress), Some(runtime)) = (job_progress, runtime) {
         if let Some(pset_id) = next_pset_id {
             let pset_name = pset_repository
@@ -204,16 +228,24 @@ fn record_tightening_completion(
                 previous_step: progress.previous_step_index as u32 + 1,
             });
         }
-        observable_state.broadcast(SimulatorEvent::JobProgress {
-            state: runtime.clone(),
-        });
         if let Some(status) = progress.completed_status {
-            let mut completed_state = runtime;
+            let mut completed_state = runtime.clone();
             completed_state.status = status;
             completed_state.total_progress = completed_state.total_batch_size;
+            if !progress.repeated {
+                observable_state.broadcast(SimulatorEvent::JobProgress {
+                    state: runtime.clone(),
+                });
+            }
             observable_state.broadcast(SimulatorEvent::JobCompleted {
                 state: completed_state,
+                repeated: progress.repeated,
             });
+            if progress.repeated {
+                observable_state.broadcast(SimulatorEvent::JobProgress { state: runtime });
+            }
+        } else {
+            observable_state.broadcast(SimulatorEvent::JobProgress { state: runtime });
         }
     } else if batch_completed {
         observable_state.broadcast(SimulatorEvent::BatchCompleted {
@@ -225,7 +257,17 @@ fn record_tightening_completion(
         observable_state.broadcast(SimulatorEvent::ToolStateChanged { enabled: false });
     }
 
-    (batch_counter, batch_completed, target_size)
+    if job_finished {
+        observable_state.write().finish_completed_job();
+    }
+
+    CompletionOutcome {
+        batch_counter,
+        batch_completed,
+        target_size,
+        batch_status,
+        job_finished,
+    }
 }
 
 /// Create the HTTP router with all endpoints configured
@@ -261,12 +303,29 @@ pub fn create_router_with_repositories(
     pset_repository: SharedPsetRepository,
     job_repository: SharedJobRepository,
 ) -> Router {
+    create_router_with_repositories_and_protocol(
+        observable_state,
+        settings,
+        pset_repository,
+        job_repository,
+        ProtocolConfiguration::default(),
+    )
+}
+
+pub fn create_router_with_repositories_and_protocol(
+    observable_state: ObservableState,
+    settings: Settings,
+    pset_repository: SharedPsetRepository,
+    job_repository: SharedJobRepository,
+    protocol_configuration: ProtocolConfiguration,
+) -> Router {
     let server_state = ServerState {
         observable_state,
         auto_tightening_active: Arc::new(AtomicBool::new(false)),
         pset_repository,
         job_repository,
         settings,
+        protocol_configuration,
     };
 
     let cors = CorsLayer::new()
@@ -280,10 +339,20 @@ pub fn create_router_with_repositories(
         .route("/auto-tightening/start", post(start_auto_tightening))
         .route("/auto-tightening/stop", post(stop_auto_tightening))
         .route("/auto-tightening/status", get(get_auto_tightening_status))
+        .route("/config/operation-mode", post(configure_operation_mode))
         .route("/config/multi-spindle", post(configure_multi_spindle))
         .route(
             "/config/failure",
             get(get_failure_config).post(update_failure_config),
+        )
+        .route("/protocol/catalog", get(get_protocol_catalog))
+        .route(
+            "/protocol/profile",
+            get(get_protocol_profile).put(update_protocol_profile),
+        )
+        .route(
+            "/protocol/profile/validate",
+            post(validate_protocol_profile),
         )
         .route("/psets", get(get_psets).post(create_pset))
         .route(
@@ -320,15 +389,33 @@ pub async fn start_http_server_with_repositories(
     pset_repository: SharedPsetRepository,
     job_repository: SharedJobRepository,
 ) {
-    let bind_addr = format!(
-        "{}:{}",
-        settings.server.bind_address, settings.server.http_port
-    );
-    let app = create_router_with_repositories(
+    start_http_server_with_repositories_and_protocol(
         observable_state,
         settings,
         pset_repository,
         job_repository,
+        ProtocolConfiguration::default(),
+    )
+    .await;
+}
+
+pub async fn start_http_server_with_repositories_and_protocol(
+    observable_state: ObservableState,
+    settings: Settings,
+    pset_repository: SharedPsetRepository,
+    job_repository: SharedJobRepository,
+    protocol_configuration: ProtocolConfiguration,
+) {
+    let bind_addr = format!(
+        "{}:{}",
+        settings.server.bind_address, settings.server.http_port
+    );
+    let app = create_router_with_repositories_and_protocol(
+        observable_state,
+        settings,
+        pset_repository,
+        job_repository,
+        protocol_configuration,
     );
 
     let listener = tokio::net::TcpListener::bind(&bind_addr)
@@ -344,9 +431,13 @@ pub async fn start_http_server_with_repositories(
     );
     println!("  POST   /auto-tightening/stop      - Stop automated tightening simulation");
     println!("  GET    /auto-tightening/status    - Get auto-tightening status");
+    println!("  POST   /config/operation-mode     - Select PSET, Batch, or Job mode");
     println!("  POST   /config/multi-spindle      - Configure multi-spindle mode");
     println!("  GET    /config/failure            - Get failure injection configuration");
     println!("  POST   /config/failure            - Update failure injection configuration");
+    println!("  GET    /protocol/catalog          - List MID families and revisions");
+    println!("  GET    /protocol/profile          - Get active revision profile");
+    println!("  PUT    /protocol/profile          - Update active revision profile");
     println!("  GET    /psets                     - Get all PSETs");
     println!("  POST   /psets                     - Create a new PSET");
     println!("  GET    /psets/{{id}}                - Get a specific PSET by ID");
@@ -369,9 +460,60 @@ pub async fn start_http_server_with_repositories(
 }
 
 /// Handler for GET /state endpoint
-async fn get_state(AxumState(server_state): AxumState<ServerState>) -> Json<DeviceState> {
-    let state = server_state.observable_state.read();
-    Json(state.clone())
+#[derive(Serialize)]
+struct DeviceStateResponse {
+    #[serde(flatten)]
+    state: DeviceState,
+    batch_size: u32,
+    batch_counter: u32,
+}
+
+async fn get_state(AxumState(server_state): AxumState<ServerState>) -> Json<DeviceStateResponse> {
+    let state = server_state.observable_state.read().clone();
+    let batch_size = state.tightening_tracker.batch_size();
+    let batch_counter = state.tightening_tracker.counter();
+    Json(DeviceStateResponse {
+        state,
+        batch_size,
+        batch_counter,
+    })
+}
+
+async fn get_protocol_catalog() -> Json<Vec<MidFamilyDefinition>> {
+    Json(revision_catalog())
+}
+
+async fn get_protocol_profile(
+    AxumState(server_state): AxumState<ServerState>,
+) -> Json<ProtocolProfile> {
+    Json(server_state.protocol_configuration.profile())
+}
+
+async fn validate_protocol_profile(
+    Json(profile): Json<ProtocolProfile>,
+) -> axum::response::Response {
+    match validate_profile(&profile) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "valid": true,
+                "message": "Protocol profile is valid"
+            })),
+        )
+            .into_response(),
+        Err(message) => api_error(StatusCode::BAD_REQUEST, message),
+    }
+}
+
+async fn update_protocol_profile(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(profile): Json<ProtocolProfile>,
+) -> axum::response::Response {
+    match server_state.protocol_configuration.update(profile) {
+        Ok(profile) => (StatusCode::OK, Json(profile)).into_response(),
+        Err(message) if message.contains("is stale") => api_error(StatusCode::CONFLICT, message),
+        Err(message) => api_error(StatusCode::BAD_REQUEST, message),
+    }
 }
 
 #[derive(Deserialize)]
@@ -509,7 +651,7 @@ async fn simulate_tightening(
         if final_ok { "OK" } else { "NOK" }
     );
 
-    let (batch_counter, batch_completed, _) = record_tightening_completion(
+    let completion = record_tightening_completion(
         &server_state.observable_state,
         &server_state.pset_repository,
         &params,
@@ -520,8 +662,11 @@ async fn simulate_tightening(
         fsm_outcome.angle_ok,
         true,
     );
-    if batch_completed && !job_mode {
-        println!("Batch completed with {} tightenings", batch_counter);
+    if completion.batch_completed && !job_mode {
+        println!(
+            "Batch completed with {} tightenings",
+            completion.batch_counter
+        );
     }
 
     let subscribers = 0; // WebSocket subscribers (not tracked in current API)
@@ -538,7 +683,7 @@ async fn simulate_tightening(
                         "Tightening result broadcast to {} TCP client(s)",
                         subscribers
                     ),
-                    batch_counter,
+                    batch_counter: completion.batch_counter,
                     subscribers,
                 }),
             )
@@ -550,7 +695,7 @@ async fn simulate_tightening(
                 Json(TighteningResponse {
                     success: false,
                     message: "Failed to broadcast tightening event".to_string(),
-                    batch_counter,
+                    batch_counter: completion.batch_counter,
                     subscribers: 0,
                 }),
             )
@@ -795,7 +940,7 @@ async fn start_auto_tightening(
                     status: completed_status,
                 });
 
-                let (batch_counter, batch_completed, target_size) = record_tightening_completion(
+                let completion = record_tightening_completion(
                     &observable_state,
                     &pset_repository,
                     &params,
@@ -807,35 +952,38 @@ async fn start_auto_tightening(
                     false,
                 );
 
-                let batch_status = {
-                    let state = observable_state.read();
-                    state
-                        .current_job_status
-                        .map(|status| status.protocol_value())
-                        .unwrap_or(if batch_completed { 1 } else { 2 })
-                };
                 observable_state.broadcast(SimulatorEvent::MultiSpindleResultCompleted {
                     result: multi_result,
                     job_id,
                     pset_id,
                     batch_size: operation_batch_size,
-                    batch_counter,
-                    batch_status,
+                    batch_counter: completion.batch_counter,
+                    batch_status: completion.batch_status,
                 });
 
+                if completion.job_finished {
+                    auto_active.store(false, Ordering::Relaxed);
+                }
                 // Broadcast auto-tightening progress
                 let is_running = auto_active.load(Ordering::Relaxed);
-                observable_state.broadcast_auto_progress(batch_counter, target_size, is_running);
+                observable_state.broadcast_auto_progress(
+                    completion.batch_counter,
+                    completion.target_size,
+                    is_running,
+                );
 
-                if batch_completed && !observable_state.read().is_job_mode() {
-                    println!("Batch completed with {} tightenings", batch_counter);
+                if completion.batch_completed && !completion.job_finished {
+                    println!(
+                        "Batch completed with {} tightenings",
+                        completion.batch_counter
+                    );
                 }
             } else {
                 // ============================================================
                 // SINGLE-SPINDLE PATH
                 // ============================================================
 
-                let (batch_counter, batch_completed, target_size) = record_tightening_completion(
+                let completion = record_tightening_completion(
                     &observable_state,
                     &pset_repository,
                     &params,
@@ -847,12 +995,22 @@ async fn start_auto_tightening(
                     true,
                 );
 
+                if completion.job_finished {
+                    auto_active.store(false, Ordering::Relaxed);
+                }
                 // Broadcast auto-tightening progress
                 let is_running = auto_active.load(Ordering::Relaxed);
-                observable_state.broadcast_auto_progress(batch_counter, target_size, is_running);
+                observable_state.broadcast_auto_progress(
+                    completion.batch_counter,
+                    completion.target_size,
+                    is_running,
+                );
 
-                if batch_completed && !observable_state.read().is_job_mode() {
-                    println!("Batch completed with {} tightenings", batch_counter);
+                if completion.batch_completed && !completion.job_finished {
+                    println!(
+                        "Batch completed with {} tightenings",
+                        completion.batch_counter
+                    );
                 }
             }
 
@@ -961,6 +1119,59 @@ async fn get_auto_tightening_status(
         target_size: target,
         remaining_bolts: target.saturating_sub(counter),
     })
+}
+
+#[derive(Deserialize)]
+struct OperationModeRequest {
+    mode: OperationMode,
+}
+
+#[derive(Serialize)]
+struct OperationModeResponse {
+    success: bool,
+    message: String,
+    mode: OperationMode,
+    batch_size: u32,
+    current_job_id: Option<u32>,
+    auto_tightening_stopped: bool,
+}
+
+async fn configure_operation_mode(
+    AxumState(server_state): AxumState<ServerState>,
+    Json(payload): Json<OperationModeRequest>,
+) -> axum::response::Response {
+    let auto_tightening_stopped = server_state
+        .auto_tightening_active
+        .swap(false, Ordering::Relaxed);
+
+    let message = match payload.mode {
+        OperationMode::Pset => {
+            server_state.observable_state.set_pset_mode();
+            "PSET mode selected".to_string()
+        }
+        OperationMode::Batch => {
+            server_state.observable_state.set_batch_mode();
+            "Batch mode selected; MID 0019 batch configuration is accepted".to_string()
+        }
+        OperationMode::Job => {
+            server_state.observable_state.set_job_mode();
+            "Job mode selected".to_string()
+        }
+    };
+
+    let state = server_state.observable_state.read();
+    (
+        StatusCode::OK,
+        Json(OperationModeResponse {
+            success: true,
+            message,
+            mode: state.operation_mode(),
+            batch_size: state.tightening_tracker.batch_size(),
+            current_job_id: state.current_job_id,
+            auto_tightening_stopped,
+        }),
+    )
+        .into_response()
 }
 
 // ============================================================================
@@ -1317,10 +1528,10 @@ async fn select_pset(
     AxumState(server_state): AxumState<ServerState>,
     Path(id): Path<u32>,
 ) -> impl IntoResponse {
-    if server_state.observable_state.read().is_job_mode() {
+    if server_state.observable_state.read().operation_mode() == OperationMode::Job {
         return api_error(
             StatusCode::CONFLICT,
-            "PSET selection is controlled by the active Job. Exit JobMode first.",
+            "PSET selection is unavailable in Job mode.",
         );
     }
     // Check if PSET exists
@@ -1619,19 +1830,37 @@ async fn select_job(
     AxumState(server_state): AxumState<ServerState>,
     Path(id): Path<u32>,
 ) -> impl IntoResponse {
-    if server_state.observable_state.read().is_job_running() {
-        return api_error(StatusCode::CONFLICT, "A Job is already running");
+    if server_state.observable_state.read().operation_mode() != OperationMode::Job {
+        return api_error(StatusCode::CONFLICT, "Job selection requires Job mode.");
     }
     let Some(job) = server_state.job_repository.read().unwrap().get_by_id(id) else {
         return api_error(StatusCode::NOT_FOUND, format!("Job {id:02} not found"));
     };
-    let pset_name = server_state
+    if server_state.observable_state.read().is_job_running() {
+        return api_error(StatusCode::CONFLICT, "A Job is already running");
+    }
+    let Some(first_step) = job.steps.first() else {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!("Job {id:02} has no configured steps"),
+        );
+    };
+    let Some(pset_name) = server_state
         .pset_repository
         .read()
         .unwrap()
-        .get_by_id(job.steps[0].pset_id)
-        .map(|pset| pset.name);
-    match server_state.observable_state.select_job(job, pset_name) {
+        .get_by_id(first_step.pset_id)
+        .map(|pset| pset.name)
+    else {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!("Job {id:02} references missing PSET {}", first_step.pset_id),
+        );
+    };
+    match server_state
+        .observable_state
+        .select_job(job, Some(pset_name))
+    {
         Ok(()) => (
             StatusCode::OK,
             Json(serde_json::json!({

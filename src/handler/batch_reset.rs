@@ -4,7 +4,7 @@
 //! The batch size remains unchanged, only the counter is reset to 0.
 
 use crate::handler::data::command_accepted::CommandAccepted;
-use crate::handler::data::error_response::ErrorResponse;
+use crate::handler::data::error_response::{ErrorCode, ErrorResponse};
 use crate::handler::{HandlerError, MidHandler};
 use crate::protocol::{Message, Response};
 use crate::state::DeviceState;
@@ -23,29 +23,31 @@ impl BatchResetHandler {
 
 impl MidHandler for BatchResetHandler {
     fn handle(&self, message: &Message) -> Result<Response, HandlerError> {
-        if self.state.read().unwrap().is_job_mode() {
+        // Revision 1 data is the PSET ID: exactly 3 ASCII digits.
+        if message.data.len() != 3 || !message.data.iter().all(u8::is_ascii_digit) {
+            println!(
+                "MID 0020 rejected: expected 3 ASCII digits (PPP), got {} bytes: {:?}",
+                message.data.len(),
+                String::from_utf8_lossy(&message.data)
+            );
             return Ok(Response::from_data(
                 4,
                 message.revision,
-                ErrorResponse::invalid_data(20),
+                ErrorResponse::new(20, ErrorCode::InvalidData),
             ));
         }
-        // Extract pset ID from message data if present (bytes 0-2, 3 ASCII digits)
-        let pset_id = if message.data.len() >= 3 {
-            String::from_utf8_lossy(&message.data[0..3])
-                .trim()
-                .parse::<u32>()
-                .unwrap_or(0)
-        } else {
-            0
-        };
+        let pset_id = std::str::from_utf8(&message.data)
+            .expect("validated ASCII digits")
+            .parse::<u32>()
+            .expect("validated three-digit PSET ID");
 
-        let was_batch_mode = {
+        let was_batch_running = {
             let mut state = self.state.write().unwrap();
-            state.reset_batch()
+            // Only the running (selected) PSET's batch counter can be reset.
+            state.current_pset_id == Some(pset_id) && state.reset_batch()
         };
 
-        if was_batch_mode {
+        if was_batch_running {
             println!(
                 "MID 0020: Reset batch counter for pset {} - counter reset to 0",
                 pset_id
@@ -53,12 +55,13 @@ impl MidHandler for BatchResetHandler {
             let ack_data = CommandAccepted::with_mid(20);
             Ok(Response::from_data(5, message.revision, ack_data))
         } else {
-            // Not in batch mode - return error
+            // Not the running PSET or no batch configured:
+            // error 04 "Parameter set not running"
             println!(
-                "MID 0020: Reset batch counter failed - not in batch mode (pset {})",
+                "MID 0020: Reset batch counter failed - pset {} not running",
                 pset_id
             );
-            let error_data = ErrorResponse::invalid_data(20);
+            let error_data = ErrorResponse::new(20, ErrorCode::ParameterSetNotRunning);
             Ok(Response::from_data(4, message.revision, error_data))
         }
     }
