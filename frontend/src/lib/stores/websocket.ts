@@ -40,6 +40,9 @@ interface BackendDeviceState {
 	channel_id: number;
 	controller_name: string;
 	supplier_code: string;
+	operation_mode: DeviceState['operation_mode'];
+	batch_size: number;
+	batch_counter: number;
 	tool_enabled: boolean;
 	device_fsm_state: string; // Maps to tool_state in frontend
 	vehicle_id: string | null; // Maps to vehicle_id_number in frontend
@@ -85,6 +88,9 @@ function mapDeviceState(data: BackendDeviceState): DeviceState {
 		cell_id: data.cell_id,
 		channel_id: data.channel_id,
 		controller_name: data.controller_name,
+		operation_mode: data.operation_mode,
+		batch_size: data.batch_size,
+		batch_counter: data.batch_counter,
 		tool_enabled: data.tool_enabled,
 		tool_state: data.device_fsm_state, // Backend sends device_fsm_state, map to tool_state
 		vehicle_id_number: data.vehicle_id ?? null, // Backend sends vehicle_id, map to vehicle_id_number
@@ -229,6 +235,27 @@ function applyJobState(runtime: JobRuntimeState) {
 			state.current_job_total_steps = runtime.total_steps;
 			state.current_job_total_batch_size = runtime.total_batch_size;
 			state.current_pset_id = runtime.current_pset_id;
+			state.batch_size = runtime.step_batch_size;
+			state.batch_counter = runtime.step_progress;
+		}
+		return state;
+	});
+}
+
+function clearJobState() {
+	deviceState.update((state) => {
+		if (state) {
+			state.current_job_id = null;
+			state.current_job_name = null;
+			state.current_job_status = null;
+			state.current_job_step = null;
+			state.current_job_step_progress = 0;
+			state.current_job_step_batch_size = 0;
+			state.current_job_total_progress = 0;
+			state.current_job_total_steps = 0;
+			state.current_job_total_batch_size = 0;
+			state.batch_size = 0;
+			state.batch_counter = 0;
 		}
 		return state;
 	});
@@ -247,6 +274,15 @@ const eventHandlers: EventHandlerMap = {
 		deviceState.update((state) => {
 			if (state) {
 				state.tool_enabled = event.enabled;
+			}
+			return state;
+		});
+		addEvent(event);
+	},
+	OperationModeChanged: (event) => {
+		deviceState.update((state) => {
+			if (state) {
+				state.operation_mode = event.mode;
 			}
 			return state;
 		});
@@ -304,7 +340,13 @@ const eventHandlers: EventHandlerMap = {
 		addEvent(event);
 	},
 	JobCompleted: (event) => {
-		applyJobState(event.state);
+		if (!event.repeated) {
+			clearJobState();
+		}
+		addEvent(event);
+	},
+	JobAborted: (event) => {
+		clearJobState();
 		addEvent(event);
 	}
 };
@@ -320,6 +362,9 @@ function dispatchEvent(event: SimulatorEvent): void {
 			break;
 		case 'ToolStateChanged':
 			eventHandlers.ToolStateChanged(event);
+			break;
+		case 'OperationModeChanged':
+			eventHandlers.OperationModeChanged(event);
 			break;
 		case 'AutoTighteningProgress':
 			eventHandlers.AutoTighteningProgress(event);
@@ -353,6 +398,9 @@ function dispatchEvent(event: SimulatorEvent): void {
 			break;
 		case 'JobCompleted':
 			eventHandlers.JobCompleted(event);
+			break;
+		case 'JobAborted':
+			eventHandlers.JobAborted(event);
 			break;
 		default:
 			// Exhaustiveness check - TypeScript will error if a case is missing

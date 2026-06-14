@@ -9,7 +9,8 @@
 		SingleTighteningForm,
 		AutoTighteningPanel,
 		MultiSpindleConfig,
-		FailureInjectionPanel
+		FailureInjectionPanel,
+		OperationModeControl
 	} from '$lib/components/control';
 	import { onMount } from 'svelte';
 	import ControlTabs from '$lib/components/ui/ControlTabs.svelte';
@@ -61,20 +62,7 @@
 	async function clearJob() {
 		try {
 			await api.clearActiveJob();
-			deviceState.update((state) => {
-				if (state) {
-					state.current_job_id = null;
-					state.current_job_name = null;
-					state.current_job_status = null;
-					state.current_job_step = null;
-					state.current_job_step_progress = 0;
-					state.current_job_step_batch_size = 0;
-					state.current_job_total_progress = 0;
-					state.current_job_total_steps = 0;
-					state.current_job_total_batch_size = 0;
-				}
-				return state;
-			});
+			await refreshDeviceState();
 			showToast({ type: 'success', message: 'JobMode exited' });
 		} catch (error) {
 			showToast({ type: 'error', message: formatErrorMessage('exit JobMode', error) });
@@ -108,6 +96,8 @@
 			</div>
 		{/if}
 	</div>
+
+	<OperationModeControl />
 
 	{#if $deviceState?.current_job_status != null}
 		<JobRuntimePanel onRestart={restartJob} onClear={clearJob} />

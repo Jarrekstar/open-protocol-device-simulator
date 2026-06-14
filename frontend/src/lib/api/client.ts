@@ -6,7 +6,11 @@ import type {
 	FailureConfig,
 	FailureConfigRequest,
 	Pset,
-	Job
+	Job,
+	MidFamilyDefinition,
+	ProtocolProfile,
+	OperationModeRequest,
+	OperationModeResponse
 } from '$lib/types';
 import { getApiBaseUrl } from '$lib/config/env';
 
@@ -68,6 +72,28 @@ export class ApiClient {
 		return this.request<DeviceState>('/state');
 	}
 
+	async getProtocolCatalog() {
+		return this.request<MidFamilyDefinition[]>('/protocol/catalog');
+	}
+
+	async getProtocolProfile() {
+		return this.request<ProtocolProfile>('/protocol/profile');
+	}
+
+	async validateProtocolProfile(profile: ProtocolProfile) {
+		return this.request<{ valid: boolean; message: string }>('/protocol/profile/validate', {
+			method: 'POST',
+			body: JSON.stringify(profile)
+		});
+	}
+
+	async updateProtocolProfile(profile: ProtocolProfile) {
+		return this.request<ProtocolProfile>('/protocol/profile', {
+			method: 'PUT',
+			body: JSON.stringify(profile)
+		});
+	}
+
 	/**
 	 * Simulates a single tightening operation
 	 * @param payload - Tightening parameters (torque, angle, PSET override, etc.)
@@ -108,6 +134,13 @@ export class ApiClient {
 	 */
 	async getAutoTighteningStatus() {
 		return this.request<{ running: boolean; counter: number; target_size: number; remaining_bolts: number }>('/auto-tightening/status');
+	}
+
+	async setOperationMode(config: OperationModeRequest) {
+		return this.request<OperationModeResponse>('/config/operation-mode', {
+			method: 'POST',
+			body: JSON.stringify(config)
+		});
 	}
 
 	/**

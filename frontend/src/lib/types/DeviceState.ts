@@ -1,7 +1,12 @@
+export type OperationMode = 'pset' | 'batch' | 'job';
+
 export interface DeviceState {
 	cell_id: number;
 	channel_id: number;
 	controller_name: string;
+	operation_mode: OperationMode;
+	batch_size: number;
+	batch_counter: number;
 	tool_enabled: boolean;
 	tool_state: string;
 	vehicle_id_number: string | null;

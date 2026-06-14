@@ -6,6 +6,7 @@
 		{ href: '/control', label: 'Control Panel' },
 		{ href: '/psets', label: 'PSETs' },
 		{ href: '/jobs', label: 'Jobs' },
+		{ href: '/protocol', label: 'Protocol' },
 		{ href: '/events', label: 'Events' }
 	];
 </script>

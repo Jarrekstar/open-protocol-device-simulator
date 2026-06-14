@@ -6,12 +6,13 @@
 		job: Job;
 		active: boolean;
 		running: boolean;
+		selectionEnabled: boolean;
 		onEdit: (job: Job) => void;
 		onDelete: (id: number) => void;
 		onSelect: (id: number) => void;
 	}
 
-	let { job, active, running, onEdit, onDelete, onSelect }: Props = $props();
+	let { job, active, running, selectionEnabled, onEdit, onDelete, onSelect }: Props = $props();
 	const total = $derived(job.steps.reduce((sum, step) => sum + step.batch_size, 0));
 </script>
 
@@ -49,7 +50,7 @@
 	</dl>
 
 	<footer class="mt-auto flex flex-wrap gap-2 border-t border-surface-200-700-token pt-4">
-		<Button onclick={() => onSelect(job.id)} disabled={running} class="flex-1">
+		<Button onclick={() => onSelect(job.id)} disabled={running || !selectionEnabled} class="flex-1">
 			Select
 		</Button>
 		<Button

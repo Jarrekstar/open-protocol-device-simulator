@@ -1,11 +1,13 @@
 import type { TighteningResult } from './TighteningResult';
 import type { MultiSpindleResult, MultiSpindleStatus } from './MultiSpindle';
 import type { JobRuntimeState } from './Job';
+import type { OperationMode } from './DeviceState';
 
 export type SimulatorEvent =
 	| { type: 'TighteningCompleted'; result: TighteningResult }
 	| { type: 'PsetChanged'; pset_id: number; pset_name: string }
 	| { type: 'ToolStateChanged'; enabled: boolean }
+	| { type: 'OperationModeChanged'; mode: OperationMode }
 	| { type: 'BatchCompleted'; total: number }
 	| { type: 'VehicleIdChanged'; vin: string }
 	| { type: 'MultiSpindleStatusCompleted'; status: MultiSpindleStatus }
@@ -23,4 +25,5 @@ export type SimulatorEvent =
 	| { type: 'JobProgress'; state: JobRuntimeState }
 	| { type: 'JobStepChanged'; state: JobRuntimeState; previous_step: number }
 	| { type: 'JobRestarted'; state: JobRuntimeState }
-	| { type: 'JobCompleted'; state: JobRuntimeState };
+	| { type: 'JobCompleted'; state: JobRuntimeState; repeated: boolean }
+	| { type: 'JobAborted'; state: JobRuntimeState };

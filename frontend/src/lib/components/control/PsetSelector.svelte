@@ -19,10 +19,10 @@
 	const currentPsetTargets = $derived(
 		currentPset ? getPsetTargets(currentPset) : null
 	);
-	const jobModeActive = $derived($deviceState?.current_job_status != null);
+	const psetSelectionDisabled = $derived($deviceState?.operation_mode === 'job');
 
 	async function handleSelectPset(psetId: number) {
-		if (jobModeActive) return;
+		if (psetSelectionDisabled) return;
 		try {
 			await api.selectPset(psetId);
 			showToast({ type: 'success', message: `PSET ${psetId} selected!` });
@@ -43,7 +43,7 @@
 				class="select"
 				value={$deviceState?.current_pset_id || ''}
 				onchange={(e) => handleSelectPset(Number(e.currentTarget.value))}
-				disabled={jobModeActive}
+				disabled={psetSelectionDisabled}
 			>
 				{#each psets as pset}
 					<option value={pset.id}>
@@ -83,9 +83,9 @@
 			{/if}
 		</div>
 	</div>
-	{#if jobModeActive}
+	{#if psetSelectionDisabled}
 		<p class="mt-4 text-sm text-warning-600">
-			PSET selection is controlled by JobMode. Restart or exit the active Job from the Jobs page.
+			PSET selection is unavailable while Job mode controls the active sequence.
 		</p>
 	{/if}
 </Section>

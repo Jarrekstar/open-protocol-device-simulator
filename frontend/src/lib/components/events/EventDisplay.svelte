@@ -3,6 +3,7 @@
 	import TighteningEvent from './TighteningEvent.svelte';
 	import BatchEvent from './BatchEvent.svelte';
 	import ToolStateEvent from './ToolStateEvent.svelte';
+	import OperationModeEvent from './OperationModeEvent.svelte';
 	import PsetChangedEvent from './PsetChangedEvent.svelte';
 	import VehicleIdEvent from './VehicleIdEvent.svelte';
 	import MultiSpindleResultEvent from './MultiSpindleResultEvent.svelte';
@@ -23,6 +24,8 @@
 	<BatchEvent total={event.total} />
 {:else if event.type === 'ToolStateChanged'}
 	<ToolStateEvent enabled={event.enabled} />
+{:else if event.type === 'OperationModeChanged'}
+	<OperationModeEvent mode={event.mode} />
 {:else if event.type === 'PsetChanged'}
 	<PsetChangedEvent psetId={event.pset_id} psetName={event.pset_name} />
 {:else if event.type === 'VehicleIdChanged'}
@@ -47,4 +50,6 @@
 	<JobEvent action="Job restarted" state={event.state} />
 {:else if event.type === 'JobCompleted'}
 	<JobEvent action="Job completed" state={event.state} />
+{:else if event.type === 'JobAborted'}
+	<JobEvent action="Job aborted" state={event.state} />
 {/if}

@@ -81,6 +81,10 @@
 		<p class="mt-3 text-sm text-surface-600-300-token">
 			Tool {event.enabled ? 'enabled' : 'disabled'}
 		</p>
+	{:else if event.type === 'OperationModeChanged'}
+		<p class="mt-3 text-sm text-surface-600-300-token">
+			Operation mode changed to {event.mode.toUpperCase()}
+		</p>
 	{:else if event.type === 'PsetChanged'}
 		<p class="mt-3 text-sm text-surface-600-300-token">
 			PSET switched to {event.pset_name} (ID {event.pset_id})

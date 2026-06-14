@@ -22,6 +22,7 @@
 		{ id: 'MultiSpindleResultCompleted', label: 'Multi-Spindle', icon: '🔧' },
 		{ id: 'BatchCompleted', label: 'Batch', icon: '📦' },
 		{ id: 'ToolStateChanged', label: 'Tool State', icon: '🔄' },
+		{ id: 'OperationModeChanged', label: 'Mode', icon: '🎛️' },
 		{ id: 'PsetChanged', label: 'PSET', icon: '⚡' },
 		{ id: 'VehicleIdChanged', label: 'Vehicle ID', icon: '🚗' },
 		{ id: 'AutoTighteningProgress', label: 'Auto Progress', icon: '⏱️' },
@@ -177,6 +178,8 @@
 												<Badge variant={event.enabled ? 'filled-success' : 'filled-error'}>
 													{event.enabled ? 'Enabled' : 'Disabled'}
 												</Badge>
+											{:else if event.type === 'OperationModeChanged'}
+												<Badge variant="filled-primary">{event.mode.toUpperCase()}</Badge>
 												{:else if event.type === 'AutoTighteningProgress'}
 													<Badge variant={event.running ? 'filled-primary' : 'soft'}>
 														{event.running ? 'Running' : 'Stopped'}

@@ -20,9 +20,16 @@
 		batch_size: 1
 	});
 
+	function cloneJob(job: Job): Job {
+		return {
+			...job,
+			steps: job.steps.map((step) => ({ ...step }))
+		};
+	}
+
 	let formData = $state<Job>(
 		initialData
-			? structuredClone(initialData)
+			? cloneJob(initialData)
 			: {
 					id: 0,
 					name: '',
@@ -68,20 +75,54 @@
 	function validate(): Record<string, string> {
 		const next: Record<string, string> = {};
 		const nameBytes = new TextEncoder().encode(formData.name).length;
-		if (!Number.isInteger(Number(formData.id)) || formData.id < 0 || formData.id > 99) {
-			next.id = 'Job ID must be an integer from 00 to 99.';
+		if (!Number.isInteger(Number(formData.id)) || formData.id < 0 || formData.id > 9999) {
+			next.id = 'Job ID must be an integer from 0000 to 9999.';
 		}
 		if (!formData.name.trim()) next.name = 'Name is required.';
-		else if (!/^[\x00-\x7F]*$/.test(formData.name) || nameBytes > 25) {
-			next.name = 'Name must be ASCII and no longer than 25 bytes.';
+		else if (!/^[\x20-\x7E]*$/.test(formData.name) || nameBytes > 25) {
+			next.name = 'Name must use printable ASCII and be no longer than 25 bytes.';
+		}
+		if (![0, 1, 2].includes(Number(formData.forced_order))) {
+			next.forced_order = 'Forced order must be 0, 1, or 2.';
+		}
+		if (![0, 1].includes(Number(formData.batch_count_mode))) {
+			next.batch_count_mode = 'Batch count mode must be 0 or 1.';
+		}
+		if (
+			!Number.isInteger(Number(formData.first_tightening_timeout)) ||
+			formData.first_tightening_timeout < 0 ||
+			formData.first_tightening_timeout > 9999
+		) {
+			next.first_tightening_timeout = 'First tightening timeout must be from 0 to 9999.';
+		}
+		if (
+			!Number.isInteger(Number(formData.job_timeout)) ||
+			formData.job_timeout < 0 ||
+			formData.job_timeout > 99999
+		) {
+			next.job_timeout = 'Job timeout must be from 0 to 99999.';
+		}
+		if (![0, 1, 2].includes(Number(formData.loosening_mode))) {
+			next.loosening_mode = 'Loosening mode must be 0, 1, or 2.';
+		}
+		if (![0, 1].includes(Number(formData.repair_mode))) {
+			next.repair_mode = 'Repair mode must be 0 or 1.';
 		}
 		if (formData.steps.length < 1 || formData.steps.length > 50) {
 			next.steps = 'A Job must contain between 1 and 50 steps.';
 		}
 		formData.steps.forEach((step, index) => {
-			if (Number(step.channel_id) !== channelId) {
+			if (
+				!Number.isInteger(Number(step.channel_id)) ||
+				step.channel_id < 0 ||
+				step.channel_id > 99 ||
+				Number(step.channel_id) !== channelId
+			) {
 				next[`step-${index}`] = `Channel must match configured channel ${channelId}.`;
-			} else if (!psets.some((pset) => pset.id === Number(step.pset_id))) {
+			} else if (
+				!Number.isInteger(Number(step.pset_id)) ||
+				!psets.some((pset) => pset.id === Number(step.pset_id))
+			) {
 				next[`step-${index}`] = 'Select an existing PSET.';
 			} else if (
 				!Number.isInteger(Number(step.batch_size)) ||
@@ -137,7 +178,7 @@
 			type="number"
 			bind:value={formData.id}
 			min={0}
-			max={99}
+			max={9999}
 			disabled={mode === 'edit'}
 			error={errors.id}
 			help="Revision 1 uses IDs 00-99."
@@ -148,7 +189,7 @@
 			type="text"
 			bind:value={formData.name}
 			error={errors.name}
-			help="ASCII, maximum 25 bytes."
+			help="Printable ASCII, maximum 25 bytes."
 			required
 		/>
 		<FormField
@@ -159,6 +200,7 @@
 				{ value: 0, label: 'Count OK only' },
 				{ value: 1, label: 'Count OK and NOK' }
 			]}
+			error={errors.batch_count_mode}
 		/>
 		<FormField
 			label="Forced Order"
@@ -169,6 +211,7 @@
 				{ value: 1, label: 'Forced order' },
 				{ value: 2, label: 'Free order, forced first' }
 			]}
+			error={errors.forced_order}
 			help="Stored for protocol compatibility; execution is sequential in revision 1."
 		/>
 	</div>
@@ -274,6 +317,7 @@
 					bind:value={formData.first_tightening_timeout}
 					min={0}
 					max={9999}
+					error={errors.first_tightening_timeout}
 					help="Informational, 0000-9999."
 				/>
 				<FormField
@@ -282,6 +326,7 @@
 					bind:value={formData.job_timeout}
 					min={0}
 					max={99999}
+					error={errors.job_timeout}
 					help="Informational, 00000-99999."
 				/>
 				<FormField
@@ -293,6 +338,7 @@
 						{ value: 1, label: 'Enabled' },
 						{ value: 2, label: 'Enabled with confirmation' }
 					]}
+					error={errors.loosening_mode}
 					help="Informational."
 				/>
 				<FormField
@@ -303,6 +349,7 @@
 						{ value: 0, label: 'Disabled' },
 						{ value: 1, label: 'Enabled' }
 					]}
+					error={errors.repair_mode}
 					help="Informational."
 				/>
 				<FormField label="Lock tool at job done" type="checkbox" bind:value={formData.lock_at_job_done} />
