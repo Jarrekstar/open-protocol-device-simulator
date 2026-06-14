@@ -30,8 +30,8 @@ This simulator implements the **Open Protocol** specification with both a TCP se
 I built this while working on MES integrations for manufacturing assembly lines. Every time we needed to test new integration code or troubleshoot issues, we'd either wait for hardware availability or risk disrupting production systems. This simulator eliminates that bottleneck.
 
 **Important Note**: This simulator implements the **specific MIDs and features I needed** for my integration work. It covers the most common use cases (tightening results, batch management, parameter sets, multi-spindle) but is not a complete Open Protocol implementation. For example:
-- Only **revision 1** of MIDs is supported (not revision 2+)
-- **Job system** (MID 0030-0039) is not implemented
+- Communication start supports revisions 1-6; PSET selection and Vehicle ID support revisions 1-2
+- Job, tightening-result, and multi-spindle-result MIDs support every revision defined for those messages in Open Protocol R2.8
 - Many advanced features are not yet implemented
 
 This focused approach made it practical to build and maintain. The architecture is designed to be extensible, so additional features can be added as needed. Contributions welcome!
@@ -192,11 +192,12 @@ Implements the most commonly used MIDs from the Open Protocol specification:
 - ✅ **MID 0020** - Reset batch counter
 
 **Job Management:**
+- ✅ **MID 0030-0039** - Job upload, information, selection, and restart (revisions 1-5 as applicable)
 - ✅ **MID 0128** - Job batch increment (skip bolt position)
 
 **Tightening Results:**
 - ✅ **MID 0060/0061/0062/0063** - Result subscription/broadcast/ack/unsubscribe
-- ✅ **MID 0061** - Last tightening result data (23 parameters)
+- ✅ **MID 0061** - Revisions 1-7, 998, and compact revision 999
 
 **Vehicle ID:**
 - ✅ **MID 0050/0051/0052/0053** - VIN subscription/download/broadcast/ack
@@ -206,6 +207,7 @@ Implements the most commonly used MIDs from the Open Protocol specification:
 
 **Multi-Spindle Mode:**
 - ✅ **MID 0090/0091/0093** - Multi-spindle status subscription/broadcast/ack
+- ✅ **MID 0100-0103** - Multi-spindle result revisions 1-5
 - ✅ **MID 0100/0101/0102** - Multi-spindle result subscription/broadcast/ack
 
 ### 🚀 Advanced Capabilities
@@ -556,7 +558,7 @@ ws.onerror = (error) => {
 cargo run
 
 # Terminal 2: Configure batch size (4 bolts)
-echo '0025001900100030004' | nc localhost 8080
+printf '00250019001         00104\0' | nc localhost 8080
 
 # Terminal 3: Connect client and subscribe to MID 0061
 echo '00200060001         001' | nc localhost 8080
@@ -625,11 +627,11 @@ curl -X POST http://localhost:8081/auto-tightening/start \
 # Auto-tightening completes default batch (size=1), then waits...
 
 # Terminal 4: Integrator sends Batch 1 (engine bolts)
-echo '0025001900100030006' | nc localhost 8080  # 6 bolts
+printf '00250019001         00106\0' | nc localhost 8080  # 6 bolts
 # Auto-tightening resumes, completes 6 bolts, waits...
 
 # Terminal 4: Integrator sends Batch 2 (oil pan bolts)
-echo '0025001900100030008' | nc localhost 8080  # 8 bolts
+printf '00250019001         00108\0' | nc localhost 8080  # 8 bolts
 # Completes 8 more bolts, waits...
 
 # Terminal 5: Stop when done
@@ -906,20 +908,18 @@ Performance characteristics depend on hardware and workload. For production depl
 **Scope Note**: This simulator was built to cover **the simplest use case needed to verify MES integrations** during real-world development work. It implements the core functionality required for most integration scenarios but is not a complete Open Protocol implementation.
 
 **Protocol Limitations:**
-- **MID Revisions**: Only revision 1 is supported (revision 2+ features not implemented)
-- **Job System**: MID 0030-0039 (Job management) is not implemented
+- **MID Revisions**: Every revision defined by R2.8 for the simulator's existing MID families is implemented; families defined only at revision 1 remain revision 1
+- **Job System**: MID 0030-0039 supports revisions 1-5 where defined by R2.8
 - **Link-Layer**: Application-level acknowledgement only (no link-layer)
 - **Advanced Features**: Many specialized features not yet implemented
 
 **Not Yet Implemented:**
-- Full job management (MID 0030-0039, only MID 0128 batch increment is implemented)
 - Alarm subscriptions (MID 0070-0078)
 - Result uploads (MID 0064-0065)
 - Time setting (MID 0080-0081)
 - Tool configuration (MID 0011-0013)
 - Advanced torque/angle curve data
 - Frontend authentication/authorization
-- MID revision 2+ features (identifier fields, extended data)
 
 **What IS Implemented:**
 The simulator handles the **80% use case** for integration testing:
