@@ -2,7 +2,7 @@ use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use open_protocol_device_simulator::{
     codec, config, events, failure_simulator, handler, http_server, observable_state, protocol,
-    session, state,
+    session, state, webui,
 };
 use std::sync::Arc;
 use thiserror::Error;
@@ -104,6 +104,15 @@ async fn serve_tcp_client(settings: Settings) -> Result<(), ServeError> {
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
     println!("Open Protocol TCP server listening on {}", bind_addr);
+
+    if settings.webui.enabled {
+        let webui_config = settings.webui.clone();
+        tokio::spawn(async move {
+            if let Err(error) = webui::start_server(webui_config).await {
+                eprintln!("Embedded WebUI server error: {error}");
+            }
+        });
+    }
 
     // Create device state from configuration (shared across all connections)
     let device_state = DeviceState::new_shared_from_config(&settings.device);

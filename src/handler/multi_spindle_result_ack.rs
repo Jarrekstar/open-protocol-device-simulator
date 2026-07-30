@@ -1,4 +1,4 @@
-use crate::handler::{HandlerError, MidHandler};
+use crate::handler::{HandlerContext, HandlerError, HandlerResult, MidHandler};
 use crate::protocol::{Message, Response};
 
 /// MID 0102 - Multi-spindle result acknowledge
@@ -8,10 +8,18 @@ pub struct MultiSpindleResultAckHandler;
 
 impl MidHandler for MultiSpindleResultAckHandler {
     fn handle(&self, _message: &Message) -> Result<Response, HandlerError> {
-        println!("MID 0102: Multi-spindle result acknowledged by client");
+        Err(HandlerError::Processing(
+            "MID 0102 does not produce a response".to_string(),
+        ))
+    }
 
-        // No response data required for acknowledgments
-        Ok(Response::new(5, 1, Vec::new()))
+    fn handle_with_context(
+        &self,
+        _message: &Message,
+        _context: &mut HandlerContext<'_>,
+    ) -> Result<HandlerResult, HandlerError> {
+        println!("MID 0102: Multi-spindle result acknowledged by client");
+        Ok(HandlerResult::NoResponse)
     }
 }
 
@@ -29,7 +37,12 @@ mod tests {
             data: vec![],
         };
 
-        let response = handler.handle(&message).unwrap();
-        assert_eq!(response.mid, 5); // Command accepted (empty response)
+        let mut subscriptions = crate::subscriptions::Subscriptions::new();
+        let mut context = HandlerContext::new(&mut subscriptions);
+
+        assert!(matches!(
+            handler.handle_with_context(&message, &mut context),
+            Ok(HandlerResult::NoResponse)
+        ));
     }
 }

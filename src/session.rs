@@ -164,7 +164,7 @@ impl ConnectionSession<Ready> {
                 .state
                 .subscriptions
                 .subscribe_multi_spindle_status_revision(revision),
-            92 => self.unsubscribe_multi_spindle_status(),
+            93 => self.unsubscribe_multi_spindle_status(),
             100 => self
                 .state
                 .subscriptions
@@ -214,7 +214,7 @@ impl ConnectionSession<Ready> {
         self.state.subscriptions.subscribe_multi_spindle_status();
     }
 
-    /// Unsubscribe from multi-spindle status events (MID 92)
+    /// Unsubscribe from multi-spindle status events (MID 93)
     pub fn unsubscribe_multi_spindle_status(&mut self) {
         self.state.subscriptions.unsubscribe_multi_spindle_status();
     }

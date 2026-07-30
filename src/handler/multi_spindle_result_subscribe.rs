@@ -20,7 +20,7 @@ impl MidHandler for MultiSpindleResultSubscribeHandler {
     fn handle_with_context(
         &self,
         message: &Message,
-        _context: &mut HandlerContext<'_>,
+        context: &mut HandlerContext<'_>,
     ) -> Result<HandlerResult, HandlerError> {
         let valid = match message.revision {
             1 => message.data.is_empty(),
@@ -35,6 +35,22 @@ impl MidHandler for MultiSpindleResultSubscribeHandler {
                 ErrorResponse::new(message.mid, ErrorCode::InvalidData),
             )));
         }
+        if context
+            .subscriptions
+            .is_subscribed_to_multi_spindle_result()
+        {
+            return Ok(HandlerResult::Response(Response::from_data(
+                4,
+                message.revision,
+                ErrorResponse::new(
+                    message.mid,
+                    ErrorCode::MultiSpindleResultSubscriptionAlreadyExists,
+                ),
+            )));
+        }
+        context
+            .subscriptions
+            .subscribe_multi_spindle_result_revision(message.revision);
         self.handle(message).map(HandlerResult::Response)
     }
 }

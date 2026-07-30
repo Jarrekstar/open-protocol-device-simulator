@@ -24,6 +24,13 @@ bind_address = "0.0.0.0"
 # Capacity of the event broadcast channel
 event_channel_capacity = 100
 
+[webui]
+# Embedded WebUI listener. It serves the production frontend from the Rust binary.
+# Keep this port distinct from server.tcp_port and server.http_port.
+enabled = false
+host = "127.0.0.1"
+port = 8082
+
 [device]
 # Cell ID reported in Open Protocol messages
 cell_id = 1

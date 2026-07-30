@@ -21,7 +21,7 @@ export const toasts = writable<Toast[]>([]);
  * @param toast - Toast configuration without id
  */
 export function showToast(toast: Omit<Toast, 'id'>) {
-	const id = crypto.randomUUID();
+	const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 	const fullToast: Toast = { id, duration: TOAST.DEFAULT_DURATION_MS, ...toast };
 
 	toasts.update((list) => [...list, fullToast]);

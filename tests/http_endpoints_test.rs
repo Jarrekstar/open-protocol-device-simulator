@@ -461,7 +461,8 @@ async fn test_operation_mode_endpoint_selects_command_profiles() {
             data: b"002".to_vec(),
         })
         .unwrap();
-    assert_eq!(accepted_pset_in_batch.mid, 16);
+    assert_eq!(accepted_pset_in_batch.mid, 5);
+    assert_eq!(accepted_pset_in_batch.data, b"0018");
     assert_eq!(state.read().unwrap().current_pset_id, Some(2));
 
     // Job uploads and subscriptions are never profile-gated (spec §3.7.3)
@@ -498,6 +499,18 @@ async fn test_operation_mode_endpoint_selects_command_profiles() {
     assert_eq!(response.mid, 5);
     assert_eq!(state.read().unwrap().tightening_tracker.batch_size(), 20);
 
+    let accepted_batch_increment = registry
+        .handle_message(&protocol::Message {
+            length: 20,
+            mid: 128,
+            revision: 1,
+            data: Vec::new(),
+        })
+        .unwrap();
+    assert_eq!(accepted_batch_increment.mid, 5);
+    assert_eq!(accepted_batch_increment.data, b"0128");
+    assert_eq!(state.read().unwrap().tightening_tracker.counter(), 1);
+
     let select_pset_mode = app
         .clone()
         .oneshot(
@@ -521,7 +534,8 @@ async fn test_operation_mode_endpoint_selects_command_profiles() {
             data: b"002".to_vec(),
         })
         .unwrap();
-    assert_eq!(accepted_pset.mid, 16);
+    assert_eq!(accepted_pset.mid, 5);
+    assert_eq!(accepted_pset.data, b"0018");
 
     // Batch size is a runtime Pset attribute (spec MID 0019), accepted in the
     // Pset profile; accepting it switches the device to batch counting.

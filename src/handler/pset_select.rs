@@ -3,6 +3,7 @@
 //! Selects a specific parameter set (pset) for tightening operations.
 //! Each pset defines torque/angle limits and tightening strategy.
 
+use crate::handler::data::command_accepted::CommandAccepted;
 use crate::handler::data::error_response::{ErrorCode, ErrorResponse};
 use crate::handler::{HandlerError, MidHandler};
 use crate::observable_state::ObservableState;
@@ -54,7 +55,12 @@ impl MidHandler for PsetSelectHandler {
         // Update device state and broadcast event
         self.state.set_pset(pset_id, Some(pset.name));
 
-        // Respond with MID 0016 (Command accepted)
-        Ok(Response::new(16, message.revision, Vec::new()))
+        // Acknowledge MID 0018 directly. The selected PSET notification is
+        // sent separately as MID 0015 to subscribed clients.
+        Ok(Response::from_data(
+            5,
+            message.revision,
+            CommandAccepted::with_mid(18),
+        ))
     }
 }

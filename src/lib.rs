@@ -17,6 +17,7 @@ pub mod session;
 pub mod state;
 pub mod subscriptions;
 pub mod tightening_tracker;
+pub mod webui;
 
 // Re-export commonly used types
 pub use events::SimulatorEvent;

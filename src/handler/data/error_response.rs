@@ -25,8 +25,20 @@ pub enum ErrorCode {
     PsetCannotBeSet = 3,
     /// Parameter set not running
     ParameterSetNotRunning = 4,
+    /// VIN upload subscription already exists
+    VehicleIdSubscriptionAlreadyExists = 6,
+    /// VIN upload subscription does not exist
+    VehicleIdSubscriptionDoesNotExist = 7,
     /// VIN input source not granted
     VehicleIdNotGranted = 8,
+    /// Last tightening result subscription already exists
+    TighteningResultSubscriptionAlreadyExists = 9,
+    /// Last tightening result subscription does not exist
+    TighteningResultSubscriptionDoesNotExist = 10,
+    /// Parameter set selection subscription already exists
+    PsetSelectionSubscriptionAlreadyExists = 13,
+    /// Parameter set selection subscription does not exist
+    PsetSelectionSubscriptionDoesNotExist = 14,
     /// Job ID not present
     JobNotFound = 17,
     /// Job info subscription already exists
@@ -37,6 +49,14 @@ pub enum ErrorCode {
     JobCannotBeSet = 20,
     /// Job not running
     JobNotRunning = 21,
+    /// Multi-spindle status subscription already exists
+    MultiSpindleStatusSubscriptionAlreadyExists = 31,
+    /// Multi-spindle status subscription does not exist
+    MultiSpindleStatusSubscriptionDoesNotExist = 32,
+    /// Multi-spindle result subscription already exists
+    MultiSpindleResultSubscriptionAlreadyExists = 33,
+    /// Multi-spindle result subscription does not exist
+    MultiSpindleResultSubscriptionDoesNotExist = 34,
     /// Reject connection, client already connected
     ClientAlreadyConnected = 96,
     /// MID revision unsupported

@@ -2,9 +2,23 @@ mod common;
 
 use open_protocol_device_simulator::protocol::revision::{ProtocolConfiguration, RevisionPolicy};
 use open_protocol_device_simulator::{
-    DeviceState, ObservableState, SimulatorEvent, handler, protocol,
+    DeviceState, ObservableState, SimulatorEvent, handler, protocol, subscriptions::Subscriptions,
 };
 use std::sync::{Arc, RwLock};
+
+fn dispatch_response(
+    registry: &handler::HandlerRegistry,
+    subscriptions: &mut Subscriptions,
+    message: &protocol::Message,
+) -> protocol::Response {
+    match registry
+        .dispatch(message, subscriptions)
+        .expect("Handler should succeed")
+    {
+        handler::HandlerResult::Response(response) => response,
+        handler::HandlerResult::NoResponse => panic!("MID {} produced no response", message.mid),
+    }
+}
 
 /// Test MID 0001 - Communication Start
 #[test]
@@ -153,13 +167,52 @@ fn test_pset_selection() {
         .handle_message(&message)
         .expect("Handler should succeed");
     assert_eq!(
-        response.mid, 16,
-        "Should respond with MID 0016 (pset selected)"
+        response.mid, 5,
+        "Should respond with MID 0005 (command accepted)"
     );
+    assert_eq!(response.data, b"0018", "ACK should echo MID 0018");
 
     // Verify state was updated
     let device_state = state.read().unwrap();
     assert_eq!(device_state.current_pset_id, Some(5));
+}
+
+#[test]
+fn test_pset_selection_ack_precedes_selected_broadcast() {
+    let state = Arc::new(RwLock::new(DeviceState::new()));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let mut event_rx = broadcaster.subscribe();
+    let observable_state = ObservableState::new(Arc::clone(&state), broadcaster);
+    let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = open_protocol_device_simulator::subscriptions::Subscriptions::new();
+
+    let subscribe = protocol::parser::parse_message(b"00200014001         ").unwrap();
+    assert!(matches!(
+        registry.dispatch(&subscribe, &mut subscriptions),
+        Ok(handler::HandlerResult::Response(response))
+            if response.mid == 5 && response.data == b"0014"
+    ));
+
+    let select = protocol::parser::parse_message(b"00230018001         002").unwrap();
+    let result = registry
+        .dispatch(&select, &mut subscriptions)
+        .expect("MID 0018 should dispatch");
+    let handler::HandlerResult::Response(response) = result else {
+        panic!("MID 0018 must produce MID 0005 before queued broadcast");
+    };
+    assert_eq!(response.mid, 5);
+    assert_eq!(response.data, b"0018");
+
+    let event = event_rx
+        .try_recv()
+        .expect("MID 0018 should queue PSET selected broadcast event");
+    assert!(matches!(
+        event,
+        SimulatorEvent::PsetChanged {
+            pset_id: 2,
+            pset_name: _
+        }
+    ));
 }
 
 /// Test MID 0019 - Batch Size
@@ -179,7 +232,8 @@ fn test_batch_size() {
     let response = registry
         .handle_message(&select)
         .expect("Handler should succeed");
-    assert_eq!(response.mid, 16);
+    assert_eq!(response.mid, 5);
+    assert_eq!(response.data, b"0018");
 
     let raw = b"00250019001         00220";
     let message = protocol::parser::parse_message(raw).expect("MID 0019 frame should parse");
@@ -191,6 +245,7 @@ fn test_batch_size() {
         response.mid, 5,
         "Should respond with MID 0005 (command accepted)"
     );
+    assert_eq!(response.data, b"0019", "ACK should echo MID 0019");
 
     // Verify batch size was updated and the profile followed
     let device_state = state.read().unwrap();
@@ -240,7 +295,8 @@ fn test_batch_commands_respect_target_pset() {
     // Selecting PSET 2 activates its stored batch size
     let select = protocol::parser::parse_message(b"00230018001         002").unwrap();
     let response = registry.handle_message(&select).unwrap();
-    assert_eq!(response.mid, 16);
+    assert_eq!(response.mid, 5);
+    assert_eq!(response.data, b"0018");
     assert_eq!(state.read().unwrap().tightening_tracker.batch_size(), 20);
     assert_eq!(
         state.read().unwrap().operation_mode(),
@@ -282,6 +338,34 @@ fn test_pset_selected_acknowledgement_has_no_response() {
 }
 
 #[test]
+fn broadcast_acknowledgement_mids_have_no_response() {
+    let state = Arc::new(RwLock::new(DeviceState::new()));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = open_protocol_device_simulator::subscriptions::Subscriptions::new();
+
+    for raw in [
+        b"00200016001         ".as_slice(),
+        b"00200036001         ".as_slice(),
+        b"00200053001         ".as_slice(),
+        b"00200062001         ".as_slice(),
+        b"00200092001         ".as_slice(),
+        b"00200102001         ".as_slice(),
+    ] {
+        let message = protocol::parser::parse_message(raw).unwrap();
+        assert!(
+            matches!(
+                registry.dispatch(&message, &mut subscriptions),
+                Ok(handler::HandlerResult::NoResponse)
+            ),
+            "MID {:04} should not produce a response",
+            message.mid
+        );
+    }
+}
+
+#[test]
 fn pset_lifecycle_is_available_in_batch_mode() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
     state.write().unwrap().set_batch_mode();
@@ -305,7 +389,7 @@ fn pset_lifecycle_is_available_in_batch_mode() {
         .expect("MID 0018 should be accepted in Batch mode");
     assert!(matches!(
         response,
-        handler::HandlerResult::Response(response) if response.mid == 16
+        handler::HandlerResult::Response(response) if response.mid == 5 && response.data == b"0018"
     ));
 
     let acknowledge =
@@ -419,6 +503,7 @@ fn test_tightening_result_subscription() {
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
     let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = Subscriptions::new();
 
     // Subscribe (MID 0060)
     let message = protocol::Message {
@@ -427,9 +512,7 @@ fn test_tightening_result_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 
     // Unsubscribe (MID 0063)
@@ -439,9 +522,7 @@ fn test_tightening_result_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 }
 
@@ -452,6 +533,7 @@ fn test_pset_subscription() {
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
     let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = Subscriptions::new();
 
     // Subscribe (MID 0014)
     let message = protocol::Message {
@@ -460,9 +542,7 @@ fn test_pset_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 
     // Unsubscribe (MID 0017)
@@ -472,9 +552,7 @@ fn test_pset_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 }
 
@@ -485,6 +563,7 @@ fn test_vehicle_id_subscription() {
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
     let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = Subscriptions::new();
 
     // Subscribe (MID 0051)
     let message = protocol::Message {
@@ -493,9 +572,7 @@ fn test_vehicle_id_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 
     // Unsubscribe (MID 0054)
@@ -505,19 +582,18 @@ fn test_vehicle_id_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 }
 
-/// Test MID 0090/0092 - Multi-Spindle Status Subscription
+/// Test MID 0090/0093 - Multi-Spindle Status Subscription
 #[test]
 fn test_multi_spindle_status_subscription() {
     let state = Arc::new(RwLock::new(DeviceState::new()));
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
     let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = Subscriptions::new();
 
     // Subscribe (MID 0090)
     let message = protocol::Message {
@@ -526,22 +602,19 @@ fn test_multi_spindle_status_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 
-    // Unsubscribe (MID 0092)
+    // Unsubscribe (MID 0093)
     let message = protocol::Message {
         length: 20,
-        mid: 92,
+        mid: 93,
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
+    assert_eq!(response.data, b"0093");
 }
 
 /// Test MID 0100/0103 - Multi-Spindle Result Subscription
@@ -551,6 +624,7 @@ fn test_multi_spindle_result_subscription() {
     let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
     let observable_state = ObservableState::new(state, broadcaster);
     let registry = handler::create_default_registry(observable_state);
+    let mut subscriptions = Subscriptions::new();
 
     // Subscribe (MID 0100)
     let message = protocol::Message {
@@ -559,9 +633,7 @@ fn test_multi_spindle_result_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
 
     // Unsubscribe (MID 0103)
@@ -571,10 +643,51 @@ fn test_multi_spindle_result_subscription() {
         revision: 1,
         data: vec![],
     };
-    let response = registry
-        .handle_message(&message)
-        .expect("Handler should succeed");
+    let response = dispatch_response(&registry, &mut subscriptions, &message);
     assert_eq!(response.mid, 5, "Should respond with MID 0005");
+}
+
+#[test]
+fn subscription_duplicate_and_missing_unsubscribe_errors_match_spec() {
+    let state = Arc::new(RwLock::new(DeviceState::new()));
+    let (broadcaster, _) = tokio::sync::broadcast::channel::<SimulatorEvent>(100);
+    let observable_state = ObservableState::new(state, broadcaster);
+    let registry = handler::create_default_registry(observable_state);
+
+    for (subscribe_mid, duplicate_error, unsubscribe_mid, missing_error) in [
+        (14, b"001413".as_slice(), 17, b"001714".as_slice()),
+        (51, b"005106".as_slice(), 54, b"005407".as_slice()),
+        (60, b"006009".as_slice(), 63, b"006310".as_slice()),
+        (90, b"009031".as_slice(), 93, b"009332".as_slice()),
+        (100, b"010033".as_slice(), 103, b"010334".as_slice()),
+    ] {
+        let mut subscriptions = Subscriptions::new();
+        let subscribe = protocol::Message {
+            length: 20,
+            mid: subscribe_mid,
+            revision: 1,
+            data: vec![],
+        };
+        assert_eq!(
+            dispatch_response(&registry, &mut subscriptions, &subscribe).mid,
+            5
+        );
+
+        let duplicate = dispatch_response(&registry, &mut subscriptions, &subscribe);
+        assert_eq!(duplicate.mid, 4);
+        assert_eq!(duplicate.data, duplicate_error);
+
+        let mut subscriptions = Subscriptions::new();
+        let unsubscribe = protocol::Message {
+            length: 20,
+            mid: unsubscribe_mid,
+            revision: 1,
+            data: vec![],
+        };
+        let missing = dispatch_response(&registry, &mut subscriptions, &unsubscribe);
+        assert_eq!(missing.mid, 4);
+        assert_eq!(missing.data, missing_error);
+    }
 }
 
 #[test]

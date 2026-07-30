@@ -197,8 +197,11 @@ fn mode_rejection(mid: u16, mode: OperationMode) -> Option<data::error_response:
         // MID 0039 restart is not gated; without a running Job its handler
         // answers error 21.
         38 if mode != OperationMode::Job => Some(ErrorCode::JobCannotBeSet),
-        // Job batch increment needs a running Job: error 21 "Job not running".
-        128 if mode != OperationMode::Job => Some(ErrorCode::JobNotRunning),
+        // MID 0128 advances either a running Job or a configured PSET batch.
+        // Without either profile it answers error 21 "Job not running".
+        128 if !matches!(mode, OperationMode::Job | OperationMode::Batch) => {
+            Some(ErrorCode::JobNotRunning)
+        }
         // Abort Job (MID 0127) is deliberately never gated: §3.7.2 lists it
         // under Pset-style production control too, so it must be accepted in
         // every operation mode and always answers MID 0005 (no error reply).
@@ -343,11 +346,11 @@ pub fn create_registry_with_repositories_and_protocol(
     );
     registry.register(
         92,
-        Box::new(multi_spindle_status_unsubscribe::MultiSpindleStatusUnsubscribeHandler),
+        Box::new(multi_spindle_status_ack::MultiSpindleStatusAckHandler),
     );
     registry.register(
         93,
-        Box::new(multi_spindle_status_ack::MultiSpindleStatusAckHandler),
+        Box::new(multi_spindle_status_unsubscribe::MultiSpindleStatusUnsubscribeHandler),
     );
     for revision in 1..=5 {
         registry.register_revision(

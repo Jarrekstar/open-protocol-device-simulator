@@ -10,7 +10,9 @@ mod cli;
 mod settings;
 
 pub use cli::CliArgs;
-pub use settings::{DatabaseConfig, DefaultsConfig, DeviceConfig, ServerConfig, Settings};
+pub use settings::{
+    DatabaseConfig, DefaultsConfig, DeviceConfig, ServerConfig, Settings, WebUiConfig,
+};
 
 use config::{Config, File, FileFormat};
 use std::path::Path;
@@ -142,6 +144,11 @@ fn print_config(settings: &Settings) {
         "  event_channel_capacity = {}",
         settings.server.event_channel_capacity
     );
+    println!();
+    println!("[webui]");
+    println!("  enabled = {}", settings.webui.enabled);
+    println!("  host = \"{}\"", settings.webui.host);
+    println!("  port = {}", settings.webui.port);
     println!();
     println!("[device]");
     println!("  cell_id = {}", settings.device.cell_id);

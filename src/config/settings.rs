@@ -12,6 +12,10 @@ pub struct Settings {
     #[serde(default)]
     pub server: ServerConfig,
 
+    /// Embedded WebUI HTTP listener configuration
+    #[serde(default)]
+    pub webui: WebUiConfig,
+
     /// Device identification configuration
     #[serde(default)]
     pub device: DeviceConfig,
@@ -23,6 +27,29 @@ pub struct Settings {
     /// Default values for various operations
     #[serde(default)]
     pub defaults: DefaultsConfig,
+}
+
+/// Embedded WebUI HTTP listener configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebUiConfig {
+    /// Whether the embedded frontend listener is enabled (default: false)
+    pub enabled: bool,
+
+    /// Host to bind the embedded frontend listener to (default: "127.0.0.1")
+    pub host: String,
+
+    /// HTTP port for the embedded frontend (default: 8082)
+    pub port: u16,
+}
+
+impl Default for WebUiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: "127.0.0.1".to_string(),
+            port: 8082,
+        }
+    }
 }
 
 /// Server configuration for TCP and HTTP listeners.
@@ -187,6 +214,9 @@ mod tests {
         assert_eq!(settings.server.tcp_port, 8080);
         assert_eq!(settings.server.http_port, 8081);
         assert_eq!(settings.server.bind_address, "0.0.0.0");
+        assert!(!settings.webui.enabled);
+        assert_eq!(settings.webui.host, "127.0.0.1");
+        assert_eq!(settings.webui.port, 8082);
         assert_eq!(settings.device.cell_id, 1);
         assert_eq!(settings.device.controller_name, "OpenProtocolSimulator");
         assert_eq!(settings.database.path, PathBuf::from("simulator.db"));

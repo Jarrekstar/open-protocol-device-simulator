@@ -59,6 +59,7 @@ package-lock.json.backup
 # Frontend build output
 frontend/build/
 frontend/.svelte-kit/
+frontend/.cargo-svelte/
 frontend/dist/
 frontend/.turbo/
 

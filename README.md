@@ -206,7 +206,7 @@ Implements the most commonly used MIDs from the Open Protocol specification:
 - ✅ **MID 0042/0043** - Tool disable/enable
 
 **Multi-Spindle Mode:**
-- ✅ **MID 0090/0091/0093** - Multi-spindle status subscription/broadcast/ack
+- ✅ **MID 0090/0091/0092/0093** - Multi-spindle status subscription/broadcast/ack/unsubscribe
 - ✅ **MID 0100-0103** - Multi-spindle result revisions 1-5
 - ✅ **MID 0100/0101/0102** - Multi-spindle result subscription/broadcast/ack
 
